@@ -21,13 +21,53 @@ ensure_audio_graph() {
       sink_properties=device.description=WhatsApp_to_TeamSpeak >/dev/null
   fi
 
+  if ! pactl list short sources | awk '{print $2}' | grep -qx 'ts_mic'; then
+    pactl load-module module-remap-source \
+      source_name=ts_mic \
+      master=ts_out.monitor \
+      rate=48000 channels=2 channel_map=front-left,front-right \
+      master_channel_map=front-left,front-right \
+      source_properties=device.description=TeamSpeak_to_WhatsApp_Microphone >/dev/null
+  fi
+
+  if ! pactl list short sources | awk '{print $2}' | grep -qx 'wa_mic'; then
+    pactl load-module module-remap-source \
+      source_name=wa_mic \
+      master=wa_out.monitor \
+      rate=48000 channels=2 channel_map=front-left,front-right \
+      master_channel_map=front-left,front-right \
+      source_properties=device.description=WhatsApp_to_TeamSpeak_Microphone >/dev/null
+  fi
+
   pactl set-default-sink wa_out || true
-  pactl set-default-source ts_out.monitor || true
+  pactl set-default-source ts_mic || true
   touch /tmp/audio-ready
+}
+
+route_streams() {
+  pactl list sink-inputs | awk '
+    /^Sink Input #/ { id = substr($3, 2) }
+    /application.process.binary = "chromium"/ { print id " wa_out" }
+    /application.process.binary = "ts3client_linux_amd64"/ { print id " ts_out" }
+  ' | while read -r input target; do
+    [[ -n "${input:-}" && -n "${target:-}" ]] || continue
+    pactl move-sink-input "$input" "$target" >/dev/null 2>&1 || true
+  done
+
+  pactl list source-outputs | awk '
+    /^Source Output #/ { id = substr($3, 2) }
+    /application.process.binary = "chromium"/ { print id " ts_mic" }
+    /application.process.binary = "ts3client_linux_amd64"/ { print id " wa_mic" }
+  ' | while read -r output target; do
+    [[ -n "${output:-}" && -n "${target:-}" ]] || continue
+    pactl move-source-output "$output" "$target" >/dev/null 2>&1 || true
+  done
 }
 
 rm -f /tmp/audio-ready
 while true; do
-  ensure_audio_graph || true
+  if ensure_audio_graph; then
+    route_streams || true
+  fi
   sleep 3
 done

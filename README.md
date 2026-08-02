@@ -13,8 +13,8 @@ Ein einzelner Linux-Container mit:
 ## Audiofluss
 
 ```text
-TeamSpeak-Wiedergabe -> ts_out -> ts_out.monitor -> WhatsApp-Mikrofon
-WhatsApp-Wiedergabe  -> wa_out -> wa_out.monitor -> TeamSpeak-Mikrofon
+TeamSpeak-Wiedergabe -> ts_out -> ts_out.monitor -> ts_mic -> WhatsApp-Mikrofon
+WhatsApp-Wiedergabe  -> wa_out -> wa_out.monitor -> wa_mic -> TeamSpeak-Mikrofon
 ```
 
 Es wird keine physische Soundkarte benötigt.
@@ -167,6 +167,8 @@ ts_out
 wa_out
 ts_out.monitor
 wa_out.monitor
+ts_mic
+wa_mic
 ```
 
 PulseAudio-Ströme prüfen:
@@ -192,11 +194,11 @@ Im TeamSpeak-GUI prüfen, ob das Plugin aktiviert ist. Anschließend TeamSpeak o
 Im noVNC-Desktop `pavucontrol` öffnen und prüfen:
 
 - Chromium-Wiedergabe muss auf `WhatsApp_to_TeamSpeak`/`wa_out` liegen.
-- Chromium-Aufnahme muss `Monitor of TeamSpeak_to_WhatsApp`/`ts_out.monitor` nutzen.
+- Chromium-Aufnahme muss `TeamSpeak_to_WhatsApp_Microphone`/`ts_mic` nutzen.
 - TeamSpeak-Wiedergabe muss auf `TeamSpeak_to_WhatsApp`/`ts_out` liegen.
-- TeamSpeak-Aufnahme muss `Monitor of WhatsApp_to_TeamSpeak`/`wa_out.monitor` nutzen.
+- TeamSpeak-Aufnahme muss `WhatsApp_to_TeamSpeak_Microphone`/`wa_mic` nutzen.
 
-Die Startskripte setzen diese Zuordnung per `PULSE_SINK` und `PULSE_SOURCE`; manche GUI-Profile speichern jedoch eine zuvor manuell gewählte Hardwarequelle und müssen einmal auf „Default“ zurückgestellt werden.
+Die Startskripte setzen diese Zuordnung per `PULSE_SINK` und `PULSE_SOURCE`; die sichtbaren Mikrofone sind normale PulseAudio-Remap-Sources, damit Chromium und TeamSpeak sie als Eingabegeräte erkennen. Manche GUI-Profile speichern jedoch eine zuvor manuell gewählte Hardwarequelle und müssen einmal auf „Default“ zurückgestellt werden.
 
 ## Wichtige Grenzen
 

@@ -21,7 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       chromium chromium-driver \
       xvfb x11vnc x11-xserver-utils xauth openbox xterm \
       novnc websockify \
-      pulseaudio pulseaudio-utils pavucontrol \
+      pulseaudio pulseaudio-utils pavucontrol alsa-utils \
       dbus-x11 supervisor socat netcat-openbsd \
       python3 python3-selenium \
       fonts-liberation fonts-noto-color-emoji \
@@ -31,6 +31,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       libxrandr2 libxrender1 libxtst6 libxcb-keysyms1 libxcb-image0 \
       libxcb-render-util0 libxcb-icccm4 libxcb-xinerama0 libxcb-xkb1 \
       libxcb-util1 libpulse0 libopengl0 libgl1 libunwind8 libpci3 \
+      libxslt1.1 libatomic1 \
     && rm -rf /var/lib/apt/lists/*
 
 # TeamSpeak 3 wird von der offiziellen Download-Domain geladen. Das Build-Argument

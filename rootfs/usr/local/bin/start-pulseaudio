@@ -11,6 +11,7 @@ rm -f \
 
 # Keine Echtzeit-/Nice-Anforderungen und keine Desktop-/Hardware-Erkennung.
 exec /usr/bin/pulseaudio \
+  -n \
   --daemonize=no \
   --exit-idle-time=-1 \
   --disallow-exit \

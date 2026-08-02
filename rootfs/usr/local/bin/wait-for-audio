@@ -9,7 +9,9 @@ for _ in $(seq 1 120); do
   if [[ -S "$socket" ]] \
      && pactl info >/dev/null 2>&1 \
      && pactl list short sinks | awk '{print $2}' | grep -qx 'ts_out' \
-     && pactl list short sinks | awk '{print $2}' | grep -qx 'wa_out'; then
+     && pactl list short sinks | awk '{print $2}' | grep -qx 'wa_out' \
+     && pactl list short sources | awk '{print $2}' | grep -qx 'ts_mic' \
+     && pactl list short sources | awk '{print $2}' | grep -qx 'wa_mic'; then
     exit 0
   fi
   sleep 0.5
