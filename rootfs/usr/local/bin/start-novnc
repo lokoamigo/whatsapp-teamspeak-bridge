@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+for _ in $(seq 1 120); do
+  if nc -z 127.0.0.1 5900; then
+    exec /usr/bin/websockify --web=/usr/share/novnc 6080 127.0.0.1:5900
+  fi
+  sleep 0.5
+done
+echo >&2 "VNC-Port wurde nicht rechtzeitig verfügbar."
+exit 1

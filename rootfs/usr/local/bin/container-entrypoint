@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Xorg erwartet das gemeinsame Unix-Socket-Verzeichnis als root:root mit Sticky-Bit.
+install -d -o root -g root -m 1777 /tmp/.X11-unix
+
+install -d -o bridge -g bridge -m 0700 \
+  /data/home \
+  /data/home/.config \
+  /data/home/.config/pulse \
+  /data/chromium \
+  /data/teamspeak \
+  /data/vnc \
+  /tmp/runtime-bridge \
+  /tmp/runtime-bridge/pulse
+
+# Bestehende persistente Daten können aus älteren Builds root gehören.
+chown -R bridge:bridge /data /tmp/runtime-bridge
+chmod 0700 /tmp/runtime-bridge
+
+# Niemals Runtime-Artefakte einer früheren Instanz weiterverwenden.
+rm -f \
+  /tmp/runtime-bridge/pulse/native \
+  /tmp/runtime-bridge/pulse/pid \
+  /tmp/audio-ready
+
+# Chromium-Profillocks referenzieren PID und Hostname der alten Instanz und
+# dürfen nicht zusammen mit dem persistenten Login-Profil übernommen werden.
+rm -f \
+  /data/chromium/SingletonLock \
+  /data/chromium/SingletonSocket \
+  /data/chromium/SingletonCookie \
+  /data/chromium/DevToolsActivePort
+
+exec /usr/bin/supervisord -n -c /etc/supervisor/supervisord.conf

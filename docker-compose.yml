@@ -1,0 +1,28 @@
+services:
+  bridge:
+    build:
+      context: .
+      args:
+        TS3_VERSION: "${TS3_VERSION:-3.6.2}"
+        TS3_LICENSE_ACCEPTED: "${TS3_LICENSE_ACCEPTED:-NO}"
+    container_name: whatsapp-teamspeak-bridge
+    restart: unless-stopped
+    shm_size: "2gb"
+    environment:
+      TZ: "${TZ:-Europe/Berlin}"
+      VNC_PASSWORD: "${VNC_PASSWORD:-change-me-now}"
+      DISPLAY_WIDTH: "${DISPLAY_WIDTH:-1440}"
+      DISPLAY_HEIGHT: "${DISPLAY_HEIGHT:-900}"
+      DISPLAY_DEPTH: "${DISPLAY_DEPTH:-24}"
+      TS3_URI: "${TS3_URI:-}"
+      TS3_CLIENTQUERY_API_KEY: "${TS3_CLIENTQUERY_API_KEY:-}"
+    ports:
+      # Sicherer Standard: nur auf dem Docker-Host erreichbar. Für Fernzugriff SSH-Tunnel nutzen.
+      - "127.0.0.1:${NOVNC_PORT:-6080}:6080"
+      - "127.0.0.1:${CHROMEDRIVER_PORT:-9515}:9515"
+      - "127.0.0.1:${CLIENTQUERY_PORT:-25640}:25640"
+    volumes:
+      - bridge-data:/data
+
+volumes:
+  bridge-data:

@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+WIDTH="${DISPLAY_WIDTH:-1440}"
+HEIGHT="${DISPLAY_HEIGHT:-900}"
+DEPTH="${DISPLAY_DEPTH:-24}"
+DISPLAY_VALUE="${DISPLAY:-:99}"
+DISPLAY_NUMBER="${DISPLAY_VALUE#:}"
+DISPLAY_NUMBER="${DISPLAY_NUMBER%%.*}"
+
+# Nur Überbleibsel eines zuvor beendeten Xvfb entfernen. Supervisor startet dieses
+# Skript erst neu, nachdem der alte Prozess beendet wurde.
+rm -f "/tmp/.X${DISPLAY_NUMBER}-lock" "/tmp/.X11-unix/X${DISPLAY_NUMBER}"
+
+exec /usr/bin/Xvfb "$DISPLAY_VALUE" \
+  -screen 0 "${WIDTH}x${HEIGHT}x${DEPTH}" \
+  -nolisten tcp \
+  -ac \
+  +extension RANDR

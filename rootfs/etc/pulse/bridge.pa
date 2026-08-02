@@ -1,0 +1,15 @@
+#!/usr/bin/pulseaudio -nF
+
+# Minimaler, deterministischer PulseAudio-Graph für den Container. Es werden
+# bewusst weder udev noch systemd/rtkit noch ein System-D-Bus benötigt.
+.fail
+
+# Das Socket-Verzeichnis ist 0700 und gehört ausschließlich dem Benutzer bridge.
+# Daher ist Cookie-Authentifizierung innerhalb dieses Containers nicht nötig.
+load-module module-native-protocol-unix socket=/tmp/runtime-bridge/pulse/native auth-anonymous=1
+
+load-module module-null-sink sink_name=ts_out rate=48000 channels=2 channel_map=front-left,front-right sink_properties=device.description=TeamSpeak_to_WhatsApp
+load-module module-null-sink sink_name=wa_out rate=48000 channels=2 channel_map=front-left,front-right sink_properties=device.description=WhatsApp_to_TeamSpeak
+
+set-default-sink wa_out
+set-default-source ts_out.monitor

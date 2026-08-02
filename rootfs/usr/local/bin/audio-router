@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+socket="${XDG_RUNTIME_DIR:-/tmp/runtime-bridge}/pulse/native"
+
+ensure_audio_graph() {
+  [[ -S "$socket" ]] || return 1
+  pactl info >/dev/null 2>&1 || return 1
+
+  if ! pactl list short sinks | awk '{print $2}' | grep -qx 'ts_out'; then
+    pactl load-module module-null-sink \
+      sink_name=ts_out \
+      rate=48000 channels=2 channel_map=front-left,front-right \
+      sink_properties=device.description=TeamSpeak_to_WhatsApp >/dev/null
+  fi
+
+  if ! pactl list short sinks | awk '{print $2}' | grep -qx 'wa_out'; then
+    pactl load-module module-null-sink \
+      sink_name=wa_out \
+      rate=48000 channels=2 channel_map=front-left,front-right \
+      sink_properties=device.description=WhatsApp_to_TeamSpeak >/dev/null
+  fi
+
+  pactl set-default-sink wa_out || true
+  pactl set-default-source ts_out.monitor || true
+  touch /tmp/audio-ready
+}
+
+rm -f /tmp/audio-ready
+while true; do
+  ensure_audio_graph || true
+  sleep 3
+done

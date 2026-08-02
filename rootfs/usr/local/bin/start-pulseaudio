@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+install -d -m 0700 "${XDG_RUNTIME_DIR}" "${XDG_RUNTIME_DIR}/pulse"
+
+# Runtime-Sockets leben nur für die aktuelle Containerinstanz. Nach einem
+# harten Abbruch können sie übrig bleiben und den neuen Server blockieren.
+rm -f \
+  "${XDG_RUNTIME_DIR}/pulse/native" \
+  "${XDG_RUNTIME_DIR}/pulse/pid"
+
+# Keine Echtzeit-/Nice-Anforderungen und keine Desktop-/Hardware-Erkennung.
+exec /usr/bin/pulseaudio \
+  --daemonize=no \
+  --exit-idle-time=-1 \
+  --disallow-exit \
+  --high-priority=no \
+  --realtime=no \
+  --log-target=stderr \
+  --log-level=notice \
+  --file=/etc/pulse/bridge.pa

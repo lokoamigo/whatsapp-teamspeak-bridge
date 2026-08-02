@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+socket="${XDG_RUNTIME_DIR:-/tmp/runtime-bridge}/pulse/native"
+
+for _ in $(seq 1 120); do
+  # Erst pactl aufrufen, wenn der von supervisord verwaltete Server wirklich
+  # lauscht. So kann kein libpulse-Autospawn mit dem Hauptprozess konkurrieren.
+  if [[ -S "$socket" ]] \
+     && pactl info >/dev/null 2>&1 \
+     && pactl list short sinks | awk '{print $2}' | grep -qx 'ts_out' \
+     && pactl list short sinks | awk '{print $2}' | grep -qx 'wa_out'; then
+    exit 0
+  fi
+  sleep 0.5
+done
+
+echo >&2 "Virtuelle Audio-Geräte wurden nicht rechtzeitig verfügbar."
+exit 1

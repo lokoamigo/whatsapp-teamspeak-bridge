@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+for _ in $(seq 1 600); do
+  if nc -z 127.0.0.1 25639; then
+    exec /usr/bin/socat \
+      TCP-LISTEN:25640,bind=0.0.0.0,reuseaddr,fork \
+      TCP:127.0.0.1:25639
+  fi
+  sleep 1
+done
+echo >&2 "ClientQuery-Plugin ist nicht auf Port 25639 erschienen. Im TeamSpeak-GUI Plugin aktivieren."
+exit 1

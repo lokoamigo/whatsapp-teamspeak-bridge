@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -euo pipefail
+/usr/local/bin/wait-for-display
+
+ARGS=(
+  -display "${DISPLAY:-:99}"
+  -forever
+  -shared
+  -rfbport 5900
+  -noxdamage
+  -repeat
+  -xkb
+)
+
+if [[ -n "${VNC_PASSWORD:-}" ]]; then
+  mkdir -p /data/vnc
+  x11vnc -storepasswd "$VNC_PASSWORD" /data/vnc/passwd >/dev/null
+  chmod 0600 /data/vnc/passwd
+  ARGS+=( -rfbauth /data/vnc/passwd )
+else
+  echo >&2 "WARNUNG: VNC_PASSWORD ist leer; noVNC läuft ohne Passwort."
+  ARGS+=( -nopw )
+fi
+
+exec /usr/bin/x11vnc "${ARGS[@]}"

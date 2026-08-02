@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+for _ in $(seq 1 120); do
+  if xdpyinfo -display "${DISPLAY:-:99}" >/dev/null 2>&1; then
+    exit 0
+  fi
+  sleep 0.25
+done
+echo >&2 "X-Display wurde nicht rechtzeitig verfügbar."
+exit 1

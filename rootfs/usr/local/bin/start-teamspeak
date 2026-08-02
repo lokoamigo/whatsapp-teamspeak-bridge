@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+/usr/local/bin/wait-for-display
+/usr/local/bin/wait-for-audio
+
+export HOME=/data/teamspeak
+export XDG_CONFIG_HOME=/data/teamspeak/.config
+export PULSE_SINK=ts_out
+export PULSE_SOURCE=wa_out.monitor
+export QT_X11_NO_MITSHM=1
+export QTWEBENGINE_DISABLE_SANDBOX=1
+export LIBGL_ALWAYS_SOFTWARE=1
+
+mkdir -p "$HOME" "$XDG_CONFIG_HOME"
+cd /opt/teamspeak3
+
+if [[ -n "${TS3_URI:-}" ]]; then
+  exec ./ts3client_runscript.sh "$TS3_URI"
+else
+  exec ./ts3client_runscript.sh
+fi
