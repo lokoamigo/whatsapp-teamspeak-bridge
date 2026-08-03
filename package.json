@@ -1,0 +1,17 @@
+{
+  "name": "whatsapp-teamspeak-bridge-bot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TeamSpeak command bot for controlling WhatsApp Web calls",
+  "type": "commonjs",
+  "main": "bot/bridge-bot.js",
+  "scripts": {
+    "start": "node bot/bridge-bot.js"
+  },
+  "dependencies": {
+    "whatsapp-web.js": "https://github.com/lokoamigo/whatsapp-web.js-new-calling-feature/archive/41ce50e1a2a262dd3c6506fe81a28897a0fcd6d5.tar.gz"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

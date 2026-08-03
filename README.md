@@ -126,7 +126,49 @@ auth apikey=DEIN_API_KEY
 whoami
 ```
 
-## 5. Selenium verwenden
+## 5. WhatsApp-Call-Bot per TeamSpeak steuern
+
+Der Container startet Chromium jetzt über einen Node-Bot auf Basis des
+gepinnten `whatsapp-web.js`-Forks mit experimenteller Web-Call-Unterstützung.
+Der Bot beendet vor dem Start alte Chromium-Prozesse, entfernt nur flüchtige
+Profil-Locks und öffnet WhatsApp Web anschließend frisch im persistenten Profil.
+So entsteht nicht mehr neben einem vorhandenen WhatsApp-Web-Fenster ein zweites
+wwebjs-Fenster.
+
+Der Chromium-Debug-Port `9222` bleibt aktiv; ChromeDriver/Selenium hängen sich
+weiterhin an diese eine sichtbare Browser-Instanz.
+
+Voraussetzung ist ein gesetzter `TS3_CLIENTQUERY_API_KEY`. Ohne Key bleibt der
+TeamSpeak-Kommandokanal deaktiviert; WhatsApp Web startet trotzdem sichtbar,
+damit QR-Code, Login und Audio weiterhin funktionieren.
+
+Optional kannst du die Steuerung auf konkrete TeamSpeak-Identitäten begrenzen:
+
+```dotenv
+BRIDGE_COMMAND_PREFIX=!wa
+BRIDGE_COMMANDER_UIDS=abcDEFghiJklMNOpqrSTUvwxYz=,zweiteUid=
+```
+
+Bleibt `BRIDGE_COMMANDER_UIDS` leer, darf jeder TeamSpeak-Nutzer Befehle
+ausführen, der den Bridge-Client per Textnachricht erreichen kann.
+
+Private Textnachricht an den TeamSpeak-Bridge-Client:
+
+```text
+!wa help
+!wa status
+!wa add +491701234567
+!wa add +491701234567 +491761234567
+!wa call +491701234567
+!wa groupcall +491701234567 +491761234567
+!wa hangup
+```
+
+`!wa add ...` lädt ausschließlich die ausdrücklich genannten Nummern in den
+aktuell aktiven WhatsApp-Anruf ein. Nummern werden auf WhatsApp-IDs im Format
+`<digits>@c.us` normalisiert; Gruppen-IDs werden abgewiesen.
+
+## 6. Selenium verwenden
 
 Die sichtbare Chromium-Sitzung läuft mit Remote Debugging auf Port 9222. ChromeDriver ist auf dem lokal gebundenen Host-Port 9515 verfügbar und verbindet Selenium mit genau dieser Sitzung.
 

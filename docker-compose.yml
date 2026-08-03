@@ -16,6 +16,10 @@ services:
       DISPLAY_DEPTH: "${DISPLAY_DEPTH:-24}"
       TS3_URI: "${TS3_URI:-}"
       TS3_CLIENTQUERY_API_KEY: "${TS3_CLIENTQUERY_API_KEY:-}"
+      BRIDGE_COMMAND_PREFIX: "${BRIDGE_COMMAND_PREFIX:-!wa}"
+      BRIDGE_COMMANDER_UIDS: "${BRIDGE_COMMANDER_UIDS:-}"
+      WWEBJS_CHROMIUM_EXECUTABLE: "/usr/bin/chromium"
+      WWEBJS_CHROMIUM_PROFILE: "/data/chromium"
     ports:
       # Sicherer Standard: nur auf dem Docker-Host erreichbar. Für Fernzugriff SSH-Tunnel nutzen.
       - "127.0.0.1:${NOVNC_PORT:-6080}:6080"

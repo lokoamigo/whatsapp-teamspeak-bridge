@@ -10,11 +10,13 @@ from __future__ import annotations
 
 import os
 import socket
+import subprocess
 import time
 
 HOST = "127.0.0.1"
 PORT = 25639
 API_KEY = os.getenv("TS3_CLIENTQUERY_API_KEY", "").strip()
+RESTART_AFTER_FAILURES = int(os.getenv("TS3_WATCHDOG_RESTART_AFTER_FAILURES", "6"))
 
 
 def recv_some(sock: socket.socket) -> str:
@@ -59,10 +61,18 @@ def run_once() -> None:
 
 
 if __name__ == "__main__":
+    failures = 0
     while True:
         try:
             run_once()
+            failures = 0
             time.sleep(30)
         except (OSError, RuntimeError) as exc:
             print(f"ClientQuery-Watchdog wartet: {exc}", flush=True)
+            if "whoami" in str(exc) or "not\\\\sconnected" in str(exc) or "not\\sconnected" in str(exc):
+                failures += 1
+                if failures >= RESTART_AFTER_FAILURES:
+                    failures = 0
+                    print("ClientQuery-Watchdog: TeamSpeak ist nicht verbunden; starte TeamSpeak neu.", flush=True)
+                    subprocess.run(["supervisorctl", "restart", "teamspeak"], check=False)
             time.sleep(5)

@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+/usr/local/bin/wait-for-display
+/usr/local/bin/wait-for-audio
+
+export PULSE_SINK=wa_out
+export PULSE_SOURCE=ts_mic
+export ALSA_CONFIG_PATH=/etc/asound.conf
+
+profile="${WWEBJS_CHROMIUM_PROFILE:-/data/chromium}"
+mkdir -p "$profile"
+
+# Der Bot besitzt Chromium. Vor jedem Start werden alte Browser-Prozesse aus
+# der vorherigen Supervisor-Instanz beendet, damit wwebjs nicht neben einem
+# vorhandenen WhatsApp-Web-Fenster noch ein weiteres Tab/Fenster erzeugt.
+pkill -u "$(id -u)" -f '/usr/lib/chromium/chromium|/usr/bin/chromium|chrome_crashpad_handler' 2>/dev/null || true
+rm -f \
+  "$profile/SingletonLock" \
+  "$profile/SingletonSocket" \
+  "$profile/SingletonCookie" \
+  "$profile/DevToolsActivePort"
+
+cd /opt/whatsapp-teamspeak-bridge
+exec npm start
