@@ -23,7 +23,6 @@ services:
     ports:
       # Sicherer Standard: nur auf dem Docker-Host erreichbar. Für Fernzugriff SSH-Tunnel nutzen.
       - "127.0.0.1:${NOVNC_PORT:-6080}:6080"
-      - "127.0.0.1:${CHROMEDRIVER_PORT:-9515}:9515"
       - "127.0.0.1:${CLIENTQUERY_PORT:-25640}:25640"
     volumes:
       - bridge-data:/data

@@ -7,7 +7,6 @@ Ein einzelner Linux-Container mit:
 - ClientQuery-Plugin als Bot-/Fernsteuerungsschnittstelle
 - zwei gekreuzten virtuellen PulseAudio-Geräten
 - noVNC-Weboberfläche für QR-Code und GUI
-- ChromeDriver/Selenium-Zugriff auf **dieselbe** sichtbare WhatsApp-Sitzung
 - persistentem Docker-Volume für WhatsApp-Login und TeamSpeak-Konfiguration
 
 ## Audiofluss
@@ -89,7 +88,6 @@ Läuft Docker auf einem entfernten Server, die Ports nicht offen ins Internet st
 
 ```bash
 ssh -L 6080:127.0.0.1:6080 \
-    -L 9515:127.0.0.1:9515 \
     -L 25640:127.0.0.1:25640 \
     user@docker-host
 ```
@@ -135,8 +133,10 @@ Profil-Locks und öffnet WhatsApp Web anschließend frisch im persistenten Profi
 So entsteht nicht mehr neben einem vorhandenen WhatsApp-Web-Fenster ein zweites
 wwebjs-Fenster.
 
-Der Chromium-Debug-Port `9222` bleibt aktiv; ChromeDriver/Selenium hängen sich
-weiterhin an diese eine sichtbare Browser-Instanz.
+Der Bot ist der einzige Besitzer der sichtbaren Chromium-Instanz. Dadurch gibt
+es kein zweites WhatsApp-Web-Fenster und keine konkurrierende Browsersteuerung.
+Der interne Chromium-Debug-Port `9222` bleibt nur für Bot-/Diagnosezwecke im
+Container aktiv und wird nicht per Compose veröffentlicht.
 
 Voraussetzung ist ein gesetzter `TS3_CLIENTQUERY_API_KEY`. Ohne Key bleibt der
 TeamSpeak-Kommandokanal deaktiviert; WhatsApp Web startet trotzdem sichtbar,
@@ -167,19 +167,6 @@ Private Textnachricht an den TeamSpeak-Bridge-Client:
 `!wa add ...` lädt ausschließlich die ausdrücklich genannten Nummern in den
 aktuell aktiven WhatsApp-Anruf ein. Nummern werden auf WhatsApp-IDs im Format
 `<digits>@c.us` normalisiert; Gruppen-IDs werden abgewiesen.
-
-## 6. Selenium verwenden
-
-Die sichtbare Chromium-Sitzung läuft mit Remote Debugging auf Port 9222. ChromeDriver ist auf dem lokal gebundenen Host-Port 9515 verfügbar und verbindet Selenium mit genau dieser Sitzung.
-
-```bash
-python3 -m venv .venv
-. .venv/bin/activate
-pip install selenium
-python automation/selenium_attach.py
-```
-
-Das Beispiel zeigt Titel/URL an und speichert einen Screenshot. Bei eigenen Skripten `driver.quit()` mit Vorsicht verwenden, weil dadurch die gekoppelte sichtbare Browser-Sitzung beendet werden kann.
 
 ## Diagnose
 
@@ -247,7 +234,7 @@ Die Startskripte setzen diese Zuordnung per `PULSE_SINK` und `PULSE_SOURCE`; die
 - Das ist eine bidirektionale Telefon-/VoIP-Brücke. Teilnehmer können ihr eigenes Signal zeitversetzt zurückbekommen; Echo und Rückkopplung sind möglich. Headsets, Push-to-Talk oder eine moderierte Halbduplex-Nutzung helfen.
 - WhatsApp-Web-DOM und Medienverhalten können sich jederzeit ändern. UI-Automatisierung ist dadurch grundsätzlich wartungsanfällig.
 - Automatisiere keine unerwünschten Nachrichten, kein Spam und keine Massenkontakte. Für reguläre geschäftliche Nachrichtenautomation ist die offizielle WhatsApp Business Platform die stabilere Lösung.
-- noVNC, ChromeDriver und ClientQuery sind mächtige Fernsteuerungsschnittstellen. Die Compose-Datei bindet sie deshalb standardmäßig nur an `127.0.0.1`.
+- noVNC und ClientQuery sind mächtige Fernsteuerungsschnittstellen. Die Compose-Datei bindet sie deshalb standardmäßig nur an `127.0.0.1`.
 
 ## Laufzeitfix: Chromium-Profillock, TeamSpeak `libpci.so.3`, PulseAudio-Race
 
@@ -292,5 +279,5 @@ Anschließend prüfen:
 docker compose exec bridge supervisorctl status
 ```
 
-`chromium`, `teamspeak`, `pulseaudio` und `chromedriver` sollten nach einigen
-Sekunden jeweils `RUNNING` anzeigen.
+`bridge-bot`, `teamspeak` und `pulseaudio` sollten nach einigen Sekunden jeweils
+`RUNNING` anzeigen.

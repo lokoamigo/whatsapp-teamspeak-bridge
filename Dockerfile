@@ -19,12 +19,12 @@ RUN test "$TS3_LICENSE_ACCEPTED" = "YES" || \
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates curl wget unzip bzip2 xz-utils less tini tzdata \
       git nodejs npm \
-      chromium chromium-driver \
+      chromium \
       xvfb x11vnc x11-xserver-utils xauth openbox xterm \
       novnc websockify \
       pulseaudio pulseaudio-utils pavucontrol alsa-utils \
       dbus-x11 supervisor socat netcat-openbsd \
-      python3 python3-selenium \
+      python3 \
       fonts-liberation fonts-noto-color-emoji \
       libasound2 libdbus-1-3 libevent-2.1-7 libglib2.0-0 libnss3 libxss1 \
       libx11-6 libx11-xcb1 libxcb1 libxcomposite1 libxcursor1 libxdamage1 \
@@ -85,7 +85,7 @@ COPY rootfs/ /
 RUN chmod +x /usr/local/bin/*
 
 VOLUME ["/data"]
-EXPOSE 6080 9515 25640
+EXPOSE 6080 25640
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=45s --retries=3 \
   CMD curl -fsS http://127.0.0.1:6080/vnc.html >/dev/null \
