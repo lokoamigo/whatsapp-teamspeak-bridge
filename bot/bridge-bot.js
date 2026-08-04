@@ -37,6 +37,9 @@ const state = {
     recoveredEventListenersAttached: false,
     activeCallId: null,
     activeCall: null,
+    autoAcceptingCallIds: new Set(),
+    autoAcceptedCallIds: new Set(),
+    autoAcceptFailedCallIds: new Set(),
 };
 
 function sleep(ms) {
@@ -161,19 +164,141 @@ function contactGroupsText() {
     return Array.from(CONTACT_GROUPS.keys()).sort().join(',');
 }
 
-async function getActiveWhatsAppCallId(waClient) {
-    if (!waClient.pupPage || waClient.pupPage.isClosed()) return state.activeCallId;
+async function getActiveWhatsAppCall(waClient) {
+    if (!waClient.pupPage || waClient.pupPage.isClosed()) return null;
 
-    const activeCallId = await waClient.pupPage.evaluate(() => {
+    return waClient.pupPage.evaluate(() => {
         try {
             const callCollectionModule = window.require('WAWebCallCollection');
             const callCollection =
                 callCollectionModule.get?.() || callCollectionModule;
-            return callCollection.activeCall?.id || null;
+            const activeCall = callCollection.activeCall;
+            if (!activeCall) return null;
+
+            return {
+                id: activeCall.id || null,
+                peerJid: activeCall.peerJid || activeCall.from || null,
+                isVideo: activeCall.isVideo === true,
+                isGroup: activeCall.isGroup === true,
+                outgoing: activeCall.outgoing === true,
+                canHandleLocally: activeCall.canHandleLocally === true,
+                webClientShouldHandle: activeCall.webClientShouldHandle === true,
+            };
         } catch (_) {
             return null;
         }
     });
+}
+
+async function hasIncomingCallAcceptButton(waClient) {
+    if (!waClient.pupPage || waClient.pupPage.isClosed()) return false;
+
+    return waClient.pupPage.evaluate(() => {
+        const acceptWords = [
+            'accept',
+            'answer',
+            'annehmen',
+            'anruf annehmen',
+            'call accept',
+        ];
+        const rejectWords = [
+            'decline',
+            'reject',
+            'hang up',
+            'end call',
+            'ablehnen',
+            'auflegen',
+            'beenden',
+        ];
+        const candidates = Array.from(
+            document.querySelectorAll(
+                'button,[role="button"],div[aria-label],span[data-icon]',
+            ),
+        );
+        const describe = (element) =>
+            [
+                element.getAttribute('aria-label'),
+                element.getAttribute('title'),
+                element.getAttribute('data-testid'),
+                element.getAttribute('data-icon'),
+                element.textContent,
+            ]
+                .filter(Boolean)
+                .join(' ')
+                .toLowerCase();
+
+        return candidates.some((element) => {
+            const description = describe(element);
+            if (!description) return false;
+            if (rejectWords.some((word) => description.includes(word))) return false;
+            if (!acceptWords.some((word) => description.includes(word))) return false;
+            const clickable = element.closest('button,[role="button"]') || element;
+            if (!(clickable instanceof HTMLElement)) return false;
+            const rect = clickable.getBoundingClientRect();
+            return rect.width > 0 && rect.height > 0;
+        });
+    });
+}
+
+async function clickIncomingCallAcceptButton(waClient) {
+    if (!waClient.pupPage || waClient.pupPage.isClosed()) return null;
+
+    return waClient.pupPage.evaluate(() => {
+        const acceptWords = [
+            'accept',
+            'answer',
+            'annehmen',
+            'anruf annehmen',
+            'call accept',
+        ];
+        const rejectWords = [
+            'decline',
+            'reject',
+            'hang up',
+            'end call',
+            'ablehnen',
+            'auflegen',
+            'beenden',
+        ];
+        const candidates = Array.from(
+            document.querySelectorAll(
+                'button,[role="button"],div[aria-label],span[data-icon]',
+            ),
+        );
+        const describe = (element) =>
+            [
+                element.getAttribute('aria-label'),
+                element.getAttribute('title'),
+                element.getAttribute('data-testid'),
+                element.getAttribute('data-icon'),
+                element.textContent,
+            ]
+                .filter(Boolean)
+                .join(' ')
+                .toLowerCase();
+
+        for (const element of candidates) {
+            const description = describe(element);
+            if (!description) continue;
+            if (rejectWords.some((word) => description.includes(word))) continue;
+            if (!acceptWords.some((word) => description.includes(word))) continue;
+
+            const clickable = element.closest('button,[role="button"]') || element;
+            if (!(clickable instanceof HTMLElement)) continue;
+            const rect = clickable.getBoundingClientRect();
+            if (rect.width <= 0 || rect.height <= 0) continue;
+
+            clickable.click();
+            return `ui:${description.slice(0, 120)}`;
+        }
+
+        return null;
+    });
+}
+
+async function getActiveWhatsAppCallId(waClient) {
+    const activeCall = await getActiveWhatsAppCall(waClient);
+    const activeCallId = activeCall?.id || null;
 
     state.activeCallId = activeCallId;
     if (!activeCallId) state.activeCall = null;
@@ -414,6 +539,13 @@ async function createWhatsAppClient() {
         console.log(
             `WhatsApp call observed: id=${call.id} from=${call.from} group=${call.isGroup} video=${call.isVideo} outgoing=${call.fromMe}`,
         );
+        autoAcceptIncomingCall(client, {
+            id: call.id,
+            outgoing: call.fromMe === true,
+            peerJid: call.from,
+            isVideo: call.isVideo,
+            isGroup: call.isGroup,
+        });
     });
 
     await client.initialize();
@@ -428,7 +560,69 @@ async function createWhatsAppClient() {
         });
     }, 5000);
     readyPoller.unref();
+    const autoAcceptPoller = setInterval(() => {
+        pollIncomingWhatsAppCall(client).catch((error) => {
+            console.error(`Auto-accept poll failed: ${error.message}`);
+        });
+    }, 1000);
+    autoAcceptPoller.unref();
     return client;
+}
+
+async function pollIncomingWhatsAppCall(client) {
+    if (!state.ready) return;
+    const activeCall = await getActiveWhatsAppCall(client);
+    if (activeCall) {
+        await autoAcceptIncomingCall(client, activeCall);
+        return;
+    }
+
+    if (await hasIncomingCallAcceptButton(client)) {
+        await autoAcceptIncomingCall(client, {
+            id: 'ui',
+            outgoing: false,
+            peerJid: 'unknown',
+            isVideo: false,
+            isGroup: false,
+        });
+    }
+}
+
+async function autoAcceptIncomingCall(client, call) {
+    if (!call || call.outgoing) return;
+
+    const callId = call.id || 'unknown';
+    const transientCallId = callId === 'ui' || callId === 'unknown';
+    if (
+        state.autoAcceptingCallIds.has(callId) ||
+        (!transientCallId && state.autoAcceptedCallIds.has(callId)) ||
+        (!transientCallId && state.autoAcceptFailedCallIds.has(callId))
+    ) {
+        return;
+    }
+
+    state.autoAcceptingCallIds.add(callId);
+    console.log(
+        `Auto-accept scheduled: id=${callId} from=${call.peerJid || 'unknown'} group=${call.isGroup === true} video=${call.isVideo === true}`,
+    );
+
+    setTimeout(() => {
+        acceptActiveWhatsAppCall(client, { attempts: 10, delayMs: 500 })
+            .then((acceptedCall) => {
+                const resolvedCallId = acceptedCall.id || callId;
+                state.autoAcceptedCallIds.add(resolvedCallId);
+                console.log(
+                    `Auto-accepted incoming WhatsApp call: ${resolvedCallId} via ${acceptedCall.method || 'unknown'}`,
+                );
+            })
+            .catch((error) => {
+                if (!transientCallId) state.autoAcceptFailedCallIds.add(callId);
+                console.error(`Auto-accept WhatsApp call failed for ${callId}: ${error.message}`);
+            })
+            .finally(() => {
+                state.autoAcceptingCallIds.delete(callId);
+            });
+    }, 250);
 }
 
 async function inspectWhatsAppRuntime(client) {
@@ -529,7 +723,7 @@ function installAcceptCallHelper() {
     window.WWebJS = window.WWebJS || {};
     if (typeof window.WWebJS.acceptCall === 'function') return;
 
-    window.WWebJS.acceptCall = async (callId) => {
+    window.WWebJS.acceptCall = async () => {
         const callCollectionModule = window.require('WAWebCallCollection');
         const callCollection =
             callCollectionModule.get?.() || callCollectionModule;
@@ -539,10 +733,61 @@ function installAcceptCallHelper() {
             throw new Error('No active WhatsApp call is available to accept.');
         }
 
-        if (callId && activeCall.id !== callId) {
-            throw new Error(
-                `Active WhatsApp call ID does not match requested call ID: ${callId}`,
+        const clickAcceptButton = () => {
+            const acceptWords = [
+                'accept',
+                'answer',
+                'annehmen',
+                'anruf annehmen',
+                'call accept',
+            ];
+            const rejectWords = [
+                'decline',
+                'reject',
+                'hang up',
+                'end call',
+                'ablehnen',
+                'auflegen',
+                'beenden',
+            ];
+            const candidates = Array.from(
+                document.querySelectorAll(
+                    'button,[role="button"],div[aria-label],span[data-icon]',
+                ),
             );
+            const describe = (element) =>
+                [
+                    element.getAttribute('aria-label'),
+                    element.getAttribute('title'),
+                    element.getAttribute('data-testid'),
+                    element.getAttribute('data-icon'),
+                    element.textContent,
+                ]
+                    .filter(Boolean)
+                    .join(' ')
+                    .toLowerCase();
+
+            for (const element of candidates) {
+                const description = describe(element);
+                if (!description) continue;
+                if (rejectWords.some((word) => description.includes(word))) continue;
+                if (!acceptWords.some((word) => description.includes(word))) continue;
+
+                const clickable = element.closest('button,[role="button"]') || element;
+                if (!(clickable instanceof HTMLElement)) continue;
+                const rect = clickable.getBoundingClientRect();
+                if (rect.width <= 0 || rect.height <= 0) continue;
+
+                clickable.click();
+                return description.slice(0, 120);
+            }
+
+            return null;
+        };
+
+        const clicked = clickAcceptButton();
+        if (clicked) {
+            return { id: activeCall.id || null, method: `ui:${clicked}` };
         }
 
         const stack = window.require('WAWebVoipStackInterface');
@@ -561,13 +806,55 @@ function installAcceptCallHelper() {
         ].find((name) => typeof voipStack?.[name] === 'function');
 
         if (!acceptMethod) {
+            const methods = Object.keys(voipStack || {})
+                .filter((name) => /accept|answer|call|incoming/i.test(name))
+                .sort()
+                .join(',');
             throw new Error(
-                'Accepting WhatsApp calls is not supported by this WhatsApp Web version: no accept/answer method was detected.',
+                `Accepting WhatsApp calls is not supported by this WhatsApp Web version: no accept/answer method was detected. voipStackMethods=${methods || 'none'}`,
             );
         }
 
         await voipStack[acceptMethod]();
+        return { id: activeCall.id || null, method: `voip:${acceptMethod}` };
     };
+}
+
+async function acceptActiveWhatsAppCall(waClient, options = {}) {
+    const attempts = options.attempts || 1;
+    const delayMs = options.delayMs || 0;
+    let lastError = null;
+
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+        try {
+            if (!state.ready) await refreshWhatsAppReady(waClient);
+            const result = await waClient.pupPage.evaluate(
+                async () => window.WWebJS.acceptCall(),
+            );
+            const acceptedCallId =
+                typeof result === 'string' ? result : result?.id || null;
+            state.activeCallId = acceptedCallId || state.activeCallId;
+            return {
+                id: acceptedCallId,
+                method: typeof result === 'object' ? result.method : 'unknown',
+            };
+        } catch (error) {
+            lastError = error;
+            const clickMethod = await clickIncomingCallAcceptButton(waClient);
+            if (clickMethod) {
+                const activeCall = await getActiveWhatsAppCall(waClient);
+                const acceptedCallId = activeCall?.id || state.activeCallId || null;
+                state.activeCallId = acceptedCallId || state.activeCallId;
+                return {
+                    id: acceptedCallId,
+                    method: clickMethod,
+                };
+            }
+            if (attempt < attempts && delayMs > 0) await sleep(delayMs);
+        }
+    }
+
+    throw lastError;
 }
 
 function whatsappStatusText() {
@@ -632,12 +919,8 @@ async function handleCommand(waClient, args) {
     }
 
     if (command === 'accept' || command === 'answer') {
-        const acceptedCallId = state.activeCallId || undefined;
-        await waClient.pupPage.evaluate(
-            async (callId) => window.WWebJS.acceptCall(callId),
-            acceptedCallId,
-        );
-        return `Accepted WhatsApp call: ${acceptedCallId || 'active call'}`;
+        const acceptedCall = await acceptActiveWhatsAppCall(waClient);
+        return `Accepted WhatsApp call: ${acceptedCall.id || 'active call'} via ${acceptedCall.method || 'unknown'}`;
     }
 
     if (command === 'call') {

@@ -31,7 +31,8 @@ Der Node-Bot in `bot/bridge-bot.js` ist der Besitzer der sichtbaren Chromium-Ins
 Der Standard-Prefix ist `!wa`.
 
 - `!wa status`: WhatsApp-/Bot-Status.
-- `!wa accept`: Eingehenden WhatsApp-Anruf annehmen, falls die aktuelle WhatsApp-Web-Version eine passende interne Accept-/Answer-Methode bereitstellt.
+- Eingehende WhatsApp-Anrufe werden automatisch angenommen, falls die aktuelle WhatsApp-Web-Version eine passende interne Accept-/Answer-Methode bereitstellt.
+- `!wa accept`: Manueller Fallback zum Annehmen des aktuell sichtbaren eingehenden WhatsApp-Anrufs.
 - `!wa call <nummer|kontaktgruppe> [...mehr]`: Neuen WhatsApp-Call starten. Wenn bereits ein Call laeuft, automatisch Teilnehmer zum aktiven Call hinzufuegen.
 - `!wa callgroup <kontaktgruppe>` / `!wa groupcall ...`: Gruppen-Call mit mehreren einzelnen Kontakten starten.
 - `!wa add <nummer> [...mehr]`: Kontakte zum aktiven WhatsApp-Call einladen.

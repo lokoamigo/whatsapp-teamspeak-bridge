@@ -178,11 +178,13 @@ aktuell aktiven WhatsApp-Anruf ein. Nummern werden auf WhatsApp-IDs im Format
 wird kein zweiter Anruf gestartet; die genannten Kontakte werden stattdessen wie
 bei `!wa add ...` in den aktiven Anruf eingeladen.
 
-`!wa accept` nimmt den aktuell sichtbaren eingehenden WhatsApp-Anruf an, sofern
-die aktuelle WhatsApp-Web-Version eine passende interne Accept-/Answer-Methode
-bereitstellt. `!wa call <gruppe>` und `!wa callgroup <gruppe>` nutzen keine
-WhatsApp-Chatgruppe, sondern die in `BRIDGE_CONTACT_GROUPS` definierte Liste
-einzelner Kontakte. WhatsApp-Gruppen-IDs (`@g.us`) werden weiterhin abgewiesen.
+Eingehende WhatsApp-Anrufe werden automatisch angenommen, sofern die aktuelle
+WhatsApp-Web-Version eine passende interne Accept-/Answer-Methode bereitstellt.
+`!wa accept` bleibt als manueller Fallback fuer den aktuell sichtbaren
+eingehenden Anruf verfuegbar. `!wa call <gruppe>` und `!wa callgroup <gruppe>`
+nutzen keine WhatsApp-Chatgruppe, sondern die in `BRIDGE_CONTACT_GROUPS`
+definierte Liste einzelner Kontakte. WhatsApp-Gruppen-IDs (`@g.us`) werden
+weiterhin abgewiesen.
 
 ## Diagnose
 
