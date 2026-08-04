@@ -11,13 +11,25 @@ const CHROMIUM_EXECUTABLE =
     process.env.WWEBJS_CHROMIUM_EXECUTABLE || '/usr/bin/chromium';
 const CHROMIUM_PROFILE = process.env.WWEBJS_CHROMIUM_PROFILE || '/data/chromium';
 const COMMAND_PREFIX = process.env.BRIDGE_COMMAND_PREFIX || '!wa';
-const BARE_COMMANDS = new Set(['help', 'status', 'add', 'call', 'groupcall', 'hangup', 'end']);
+const BARE_COMMANDS = new Set([
+    'help',
+    'status',
+    'add',
+    'accept',
+    'answer',
+    'call',
+    'callgroup',
+    'groupcall',
+    'hangup',
+    'end',
+]);
 const COMMANDER_UIDS = new Set(
     (process.env.BRIDGE_COMMANDER_UIDS || '')
         .split(',')
         .map((value) => value.trim())
         .filter(Boolean),
 );
+const CONTACT_GROUPS = parseContactGroups(process.env.BRIDGE_CONTACT_GROUPS || '{}');
 
 const state = {
     ready: false,
@@ -113,6 +125,40 @@ function normalizeContactId(input) {
     }
 
     return `${digits}@c.us`;
+}
+
+function parseContactGroups(raw) {
+    try {
+        const parsed = JSON.parse(raw || '{}');
+        const groups = new Map();
+        for (const [name, contacts] of Object.entries(parsed)) {
+            if (!Array.isArray(contacts)) {
+                throw new Error(`Contact group "${name}" must be an array.`);
+            }
+            groups.set(
+                name.toLowerCase(),
+                contacts.map(normalizeContactId),
+            );
+        }
+        return groups;
+    } catch (error) {
+        console.error(`Ignoring invalid BRIDGE_CONTACT_GROUPS: ${error.message}`);
+        return new Map();
+    }
+}
+
+function resolveCallTargets(args) {
+    if (args.length === 1) {
+        const group = CONTACT_GROUPS.get(args[0].toLowerCase());
+        if (group) return group;
+    }
+
+    return args.map(normalizeContactId);
+}
+
+function contactGroupsText() {
+    if (CONTACT_GROUPS.size === 0) return 'none';
+    return Array.from(CONTACT_GROUPS.keys()).sort().join(',');
 }
 
 class ClientQuery {
@@ -366,6 +412,7 @@ async function inspectWhatsAppRuntime(client) {
             hasSynced: null,
             wwebjs: false,
             startCall: false,
+            acceptCall: false,
             addParticipantToCall: false,
             info: null,
             reason: null,
@@ -377,6 +424,7 @@ async function inspectWhatsAppRuntime(client) {
             result.hasSynced = Socket.hasSynced === true;
             result.wwebjs = typeof window.WWebJS !== 'undefined';
             result.startCall = typeof window.WWebJS?.startCall === 'function';
+            result.acceptCall = typeof window.WWebJS?.acceptCall === 'function';
             result.addParticipantToCall =
                 typeof window.WWebJS?.addParticipantToCall === 'function';
             result.ready = result.hasSynced && result.wwebjs && result.addParticipantToCall;
@@ -407,9 +455,15 @@ async function refreshWhatsAppReady(client) {
     if (runtime.hasSynced && !runtime.wwebjs && client.pupPage && !client.pupPage.isClosed()) {
         console.log('WhatsApp Web.js runtime is synced without WWebJS; injecting utilities.');
         await client.pupPage.evaluate(LoadUtils);
+        await client.pupPage.evaluate(installAcceptCallHelper);
         await client.pupPage.waitForFunction('typeof window.WWebJS !== "undefined"', {
             timeout: 30000,
         });
+        runtime = await inspectWhatsAppRuntime(client);
+    }
+
+    if (runtime.hasSynced && runtime.wwebjs && !runtime.acceptCall && client.pupPage && !client.pupPage.isClosed()) {
+        await client.pupPage.evaluate(installAcceptCallHelper);
         runtime = await inspectWhatsAppRuntime(client);
     }
 
@@ -440,6 +494,51 @@ async function refreshWhatsAppReady(client) {
     return true;
 }
 
+function installAcceptCallHelper() {
+    window.WWebJS = window.WWebJS || {};
+    if (typeof window.WWebJS.acceptCall === 'function') return;
+
+    window.WWebJS.acceptCall = async (callId) => {
+        const callCollectionModule = window.require('WAWebCallCollection');
+        const callCollection =
+            callCollectionModule.get?.() || callCollectionModule;
+        const activeCall = callCollection.activeCall;
+
+        if (!activeCall) {
+            throw new Error('No active WhatsApp call is available to accept.');
+        }
+
+        if (callId && activeCall.id !== callId) {
+            throw new Error(
+                `Active WhatsApp call ID does not match requested call ID: ${callId}`,
+            );
+        }
+
+        const stack = window.require('WAWebVoipStackInterface');
+        if (!stack || typeof stack.getVoipStackInterface !== 'function') {
+            throw new Error(
+                'Accepting WhatsApp calls is not supported by this WhatsApp Web version: no supported internal call controller was detected.',
+            );
+        }
+
+        const voipStack = await stack.getVoipStackInterface();
+        const acceptMethod = [
+            'acceptCall',
+            'answerCall',
+            'acceptIncomingCall',
+            'handleIncomingCall',
+        ].find((name) => typeof voipStack?.[name] === 'function');
+
+        if (!acceptMethod) {
+            throw new Error(
+                'Accepting WhatsApp calls is not supported by this WhatsApp Web version: no accept/answer method was detected.',
+            );
+        }
+
+        await voipStack[acceptMethod]();
+    };
+}
+
 function whatsappStatusText() {
     const runtime = state.whatsapp;
     if (!runtime) return `ready=${state.ready}`;
@@ -448,6 +547,7 @@ function whatsappStatusText() {
         `state=${runtime.state || 'unknown'}`,
         `hasSynced=${runtime.hasSynced === true}`,
         `wwebjs=${runtime.wwebjs === true}`,
+        `acceptApi=${runtime.acceptCall === true}`,
         `callApi=${runtime.addParticipantToCall === true}`,
         runtime.reason ? `reason=${runtime.reason}` : null,
     ]
@@ -468,10 +568,14 @@ async function handleCommand(waClient, args) {
     if (command === 'help') {
         return [
             `${COMMAND_PREFIX} add +491701234567 [more numbers]`,
-            `${COMMAND_PREFIX} call +491701234567 [+491761234567 ...]`,
-            `${COMMAND_PREFIX} groupcall +491701234567 +491761234567 [more]`,
+            `${COMMAND_PREFIX} accept`,
+            `${COMMAND_PREFIX} call +491701234567`,
+            `${COMMAND_PREFIX} call +491701234567 +491761234567 [more]`,
+            `${COMMAND_PREFIX} call <contact-group-name>`,
+            `${COMMAND_PREFIX} callgroup <contact-group-name>`,
             `${COMMAND_PREFIX} hangup`,
             `${COMMAND_PREFIX} status`,
+            `contactGroups=${contactGroupsText()}`,
         ].join('\n');
     }
 
@@ -498,30 +602,45 @@ async function handleCommand(waClient, args) {
         return `Invited ${contactIds.length} participant(s) to the current WhatsApp call.`;
     }
 
-    if (command === 'call') {
-        if (args.length !== 1) {
-            throw new Error(`Usage: ${COMMAND_PREFIX} call +491701234567`);
-        }
-
-        const call = await waClient.startCall(normalizeContactId(args[0]), { video: false });
-        state.activeCall = call;
-        state.activeCallId = call.id;
-        return `Started WhatsApp voice call: ${call.id}`;
+    if (command === 'accept' || command === 'answer') {
+        const acceptedCallId = state.activeCallId || undefined;
+        await waClient.pupPage.evaluate(
+            async (callId) => window.WWebJS.acceptCall(callId),
+            acceptedCallId,
+        );
+        return `Accepted WhatsApp call: ${acceptedCallId || 'active call'}`;
     }
 
-    if (command === 'groupcall') {
-        if (args.length < 2) {
+    if (command === 'call') {
+        if (args.length < 1) {
+            throw new Error(`Usage: ${COMMAND_PREFIX} call +491701234567 [more numbers]`);
+        }
+
+        const contactIds = resolveCallTargets(args);
+        const call =
+            contactIds.length === 1
+                ? await waClient.startCall(contactIds[0], { video: false })
+                : await waClient.startGroupCall(contactIds, { video: false });
+        state.activeCall = call;
+        state.activeCallId = call.id;
+        return `Started WhatsApp voice call with ${contactIds.length} participant(s): ${call.id}`;
+    }
+
+    if (command === 'groupcall' || command === 'callgroup') {
+        if (args.length < 1) {
             throw new Error(
-                `Usage: ${COMMAND_PREFIX} groupcall +491701234567 +491761234567 [more]`,
+                `Usage: ${COMMAND_PREFIX} callgroup <contact-group-name>`,
             );
         }
 
-        const call = await waClient.startGroupCall(args.map(normalizeContactId), {
-            video: false,
-        });
+        const contactIds = resolveCallTargets(args);
+        if (contactIds.length < 2) {
+            throw new Error('A WhatsApp group call needs at least two individual participants.');
+        }
+        const call = await waClient.startGroupCall(contactIds, { video: false });
         state.activeCall = call;
         state.activeCallId = call.id;
-        return `Started WhatsApp group voice call: ${call.id}`;
+        return `Started WhatsApp group voice call with ${contactIds.length} participant(s): ${call.id}`;
     }
 
     if (command === 'hangup' || command === 'end') {

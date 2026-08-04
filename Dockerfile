@@ -1,3 +1,16 @@
+FROM debian:12-slim AS node-deps
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ca-certificates git nodejs npm \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /opt/whatsapp-teamspeak-bridge
+COPY package.json package-lock.json ./
+ENV PUPPETEER_SKIP_DOWNLOAD=true
+RUN npm ci --omit=dev
+
 FROM debian:12-slim
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -18,7 +31,7 @@ RUN test "$TS3_LICENSE_ACCEPTED" = "YES" || \
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates curl wget unzip bzip2 xz-utils less tini tzdata \
-      git nodejs npm \
+      nodejs \
       chromium \
       xvfb x11vnc x11-xserver-utils xauth openbox xterm \
       novnc websockify \
@@ -34,11 +47,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       libxcb-util1 libpulse0 libopengl0 libgl1 libunwind8 libpci3 \
       libxslt1.1 libatomic1 \
     && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /opt/whatsapp-teamspeak-bridge
-COPY package.json package-lock.json ./
-ENV PUPPETEER_SKIP_DOWNLOAD=true
-RUN npm ci --omit=dev
 
 # TeamSpeak 3 wird von der offiziellen Download-Domain geladen. Das Build-Argument
 # dient als ausdrückliche Zustimmung; die erwarteten Installer-Eingaben werden danach
@@ -80,6 +88,9 @@ RUN useradd --create-home --uid 1000 --shell /bin/bash bridge \
     && chmod 0700 /tmp/runtime-bridge \
     && ln -sf /usr/share/novnc/vnc.html /usr/share/novnc/index.html
 
+WORKDIR /opt/whatsapp-teamspeak-bridge
+COPY package.json package-lock.json ./
+COPY --from=node-deps /opt/whatsapp-teamspeak-bridge/node_modules ./node_modules
 COPY bot/ ./bot/
 COPY rootfs/ /
 RUN chmod +x /usr/local/bin/*

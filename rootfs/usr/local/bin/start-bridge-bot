@@ -22,4 +22,4 @@ rm -f \
   "$profile/DevToolsActivePort"
 
 cd /opt/whatsapp-teamspeak-bridge
-exec npm start
+exec node bot/bridge-bot.js

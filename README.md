@@ -147,26 +147,38 @@ Optional kannst du die Steuerung auf konkrete TeamSpeak-Identitäten begrenzen:
 ```dotenv
 BRIDGE_COMMAND_PREFIX=!wa
 BRIDGE_COMMANDER_UIDS=abcDEFghiJklMNOpqrSTUvwxYz=,zweiteUid=
+BRIDGE_CONTACT_GROUPS={"support":["+491701234567","+491761234567"]}
 ```
 
 Bleibt `BRIDGE_COMMANDER_UIDS` leer, darf jeder TeamSpeak-Nutzer Befehle
 ausführen, der den Bridge-Client per Textnachricht erreichen kann.
+`BRIDGE_CONTACT_GROUPS` ist eine JSON-Map fuer benannte Kontaktgruppen, die
+der Bot in mehrere einzelne WhatsApp-Call-Teilnehmer aufloest.
 
 Private Textnachricht an den TeamSpeak-Bridge-Client:
 
 ```text
 !wa help
 !wa status
+!wa accept
 !wa add +491701234567
 !wa add +491701234567 +491761234567
 !wa call +491701234567
-!wa groupcall +491701234567 +491761234567
+!wa call +491701234567 +491761234567
+!wa call support
+!wa callgroup support
 !wa hangup
 ```
 
 `!wa add ...` lädt ausschließlich die ausdrücklich genannten Nummern in den
 aktuell aktiven WhatsApp-Anruf ein. Nummern werden auf WhatsApp-IDs im Format
 `<digits>@c.us` normalisiert; Gruppen-IDs werden abgewiesen.
+
+`!wa accept` nimmt den aktuell sichtbaren eingehenden WhatsApp-Anruf an, sofern
+die aktuelle WhatsApp-Web-Version eine passende interne Accept-/Answer-Methode
+bereitstellt. `!wa call <gruppe>` und `!wa callgroup <gruppe>` nutzen keine
+WhatsApp-Chatgruppe, sondern die in `BRIDGE_CONTACT_GROUPS` definierte Liste
+einzelner Kontakte. WhatsApp-Gruppen-IDs (`@g.us`) werden weiterhin abgewiesen.
 
 ## Diagnose
 
