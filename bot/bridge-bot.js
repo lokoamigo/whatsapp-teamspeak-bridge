@@ -161,6 +161,37 @@ function contactGroupsText() {
     return Array.from(CONTACT_GROUPS.keys()).sort().join(',');
 }
 
+async function getActiveWhatsAppCallId(waClient) {
+    if (!waClient.pupPage || waClient.pupPage.isClosed()) return state.activeCallId;
+
+    const activeCallId = await waClient.pupPage.evaluate(() => {
+        try {
+            const callCollectionModule = window.require('WAWebCallCollection');
+            const callCollection =
+                callCollectionModule.get?.() || callCollectionModule;
+            return callCollection.activeCall?.id || null;
+        } catch (_) {
+            return null;
+        }
+    });
+
+    state.activeCallId = activeCallId;
+    if (!activeCallId) state.activeCall = null;
+    return activeCallId;
+}
+
+async function addParticipantsToActiveCall(waClient, contactIds) {
+    const activeCallId = await getActiveWhatsAppCallId(waClient);
+    if (!activeCallId) {
+        throw new Error('No active WhatsApp call is available to add participants.');
+    }
+
+    for (const contactId of contactIds) {
+        await waClient.addParticipantToCall(contactId, activeCallId);
+    }
+    return activeCallId;
+}
+
 class ClientQuery {
     constructor() {
         this.socket = null;
@@ -596,10 +627,8 @@ async function handleCommand(waClient, args) {
         }
 
         const contactIds = args.map(normalizeContactId);
-        for (const contactId of contactIds) {
-            await waClient.addParticipantToCall(contactId, state.activeCallId || undefined);
-        }
-        return `Invited ${contactIds.length} participant(s) to the current WhatsApp call.`;
+        const activeCallId = await addParticipantsToActiveCall(waClient, contactIds);
+        return `Invited ${contactIds.length} participant(s) to WhatsApp call: ${activeCallId}`;
     }
 
     if (command === 'accept' || command === 'answer') {
@@ -617,6 +646,12 @@ async function handleCommand(waClient, args) {
         }
 
         const contactIds = resolveCallTargets(args);
+        const activeCallId = await getActiveWhatsAppCallId(waClient);
+        if (activeCallId) {
+            await addParticipantsToActiveCall(waClient, contactIds);
+            return `Active WhatsApp call detected; invited ${contactIds.length} participant(s) instead: ${activeCallId}`;
+        }
+
         const call =
             contactIds.length === 1
                 ? await waClient.startCall(contactIds[0], { video: false })

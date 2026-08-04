@@ -174,6 +174,10 @@ Private Textnachricht an den TeamSpeak-Bridge-Client:
 aktuell aktiven WhatsApp-Anruf ein. Nummern werden auf WhatsApp-IDs im Format
 `<digits>@c.us` normalisiert; Gruppen-IDs werden abgewiesen.
 
+`!wa call ...` prüft zuerst, ob bereits ein WhatsApp-Anruf läuft. In diesem Fall
+wird kein zweiter Anruf gestartet; die genannten Kontakte werden stattdessen wie
+bei `!wa add ...` in den aktiven Anruf eingeladen.
+
 `!wa accept` nimmt den aktuell sichtbaren eingehenden WhatsApp-Anruf an, sofern
 die aktuelle WhatsApp-Web-Version eine passende interne Accept-/Answer-Methode
 bereitstellt. `!wa call <gruppe>` und `!wa callgroup <gruppe>` nutzen keine
