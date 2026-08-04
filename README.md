@@ -178,13 +178,12 @@ aktuell aktiven WhatsApp-Anruf ein. Nummern werden auf WhatsApp-IDs im Format
 wird kein zweiter Anruf gestartet; die genannten Kontakte werden stattdessen wie
 bei `!wa add ...` in den aktiven Anruf eingeladen.
 
-Eingehende WhatsApp-Anrufe werden automatisch angenommen, sofern die aktuelle
-WhatsApp-Web-Version eine passende interne Accept-/Answer-Methode bereitstellt.
-`!wa accept` bleibt als manueller Fallback fuer den aktuell sichtbaren
-eingehenden Anruf verfuegbar. `!wa call <gruppe>` und `!wa callgroup <gruppe>`
-nutzen keine WhatsApp-Chatgruppe, sondern die in `BRIDGE_CONTACT_GROUPS`
-definierte Liste einzelner Kontakte. WhatsApp-Gruppen-IDs (`@g.us`) werden
-weiterhin abgewiesen.
+Eingehende WhatsApp-Anrufe werden automatisch ueber die Call-API des
+gepinnten `whatsapp-web.js`-Forks angenommen. `!wa accept` bleibt als manueller
+Fallback fuer den aktuell sichtbaren eingehenden Anruf verfuegbar. `!wa call
+<gruppe>` und `!wa callgroup <gruppe>` nutzen keine WhatsApp-Chatgruppe,
+sondern die in `BRIDGE_CONTACT_GROUPS` definierte Liste einzelner Kontakte.
+WhatsApp-Gruppen-IDs (`@g.us`) werden weiterhin abgewiesen.
 
 ## Diagnose
 
@@ -250,7 +249,7 @@ Die Startskripte setzen diese Zuordnung per `PULSE_SINK` und `PULSE_SOURCE`; die
 ## Wichtige Grenzen
 
 - Das ist eine bidirektionale Telefon-/VoIP-Brücke. Teilnehmer können ihr eigenes Signal zeitversetzt zurückbekommen; Echo und Rückkopplung sind möglich. Headsets, Push-to-Talk oder eine moderierte Halbduplex-Nutzung helfen.
-- WhatsApp-Web-DOM und Medienverhalten können sich jederzeit ändern. UI-Automatisierung ist dadurch grundsätzlich wartungsanfällig.
+- WhatsApp-Web-Call-Interna und Medienverhalten können sich jederzeit ändern. Der gepinnte `whatsapp-web.js`-Fork kapselt diese experimentellen Call-Funktionen.
 - Automatisiere keine unerwünschten Nachrichten, kein Spam und keine Massenkontakte. Für reguläre geschäftliche Nachrichtenautomation ist die offizielle WhatsApp Business Platform die stabilere Lösung.
 - noVNC und ClientQuery sind mächtige Fernsteuerungsschnittstellen. Die Compose-Datei bindet sie deshalb standardmäßig nur an `127.0.0.1`.
 
