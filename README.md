@@ -148,6 +148,8 @@ Optional kannst du die Steuerung auf konkrete TeamSpeak-Identitäten begrenzen:
 BRIDGE_COMMAND_PREFIX=!wa
 BRIDGE_COMMANDER_UIDS=abcDEFghiJklMNOpqrSTUvwxYz=,zweiteUid=
 BRIDGE_CONTACT_GROUPS={"support":["+491701234567","+491761234567"]}
+BRIDGE_WHATSAPP_INVITE_COMMAND=!invite
+BRIDGE_AUTO_ACCEPT_POLL_MS=5000
 ```
 
 Bleibt `BRIDGE_COMMANDER_UIDS` leer, darf jeder TeamSpeak-Nutzer Befehle
@@ -184,6 +186,17 @@ Fallback fuer den aktuell sichtbaren eingehenden Anruf verfuegbar. `!wa call
 <gruppe>` und `!wa callgroup <gruppe>` nutzen keine WhatsApp-Chatgruppe,
 sondern die in `BRIDGE_CONTACT_GROUPS` definierte Liste einzelner Kontakte.
 WhatsApp-Gruppen-IDs (`@g.us`) werden weiterhin abgewiesen.
+
+WhatsApp-Nachricht an den Bridge-Account:
+
+```text
+!invite
+```
+
+Wenn ein WhatsApp-Anruf aktiv ist, lädt der Bot den Absender dieser Nachricht in
+den laufenden Anruf ein. Ist kein Anruf aktiv, passiert nichts. In
+WhatsApp-Gruppenchats wird der tatsächliche Nachrichtensender eingeladen, nicht
+die Gruppe.
 
 ## Diagnose
 
