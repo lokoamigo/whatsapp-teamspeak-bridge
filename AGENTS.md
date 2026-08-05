@@ -20,6 +20,7 @@ Der Node-Bot in `bot/bridge-bot.js` ist der Besitzer der sichtbaren Chromium-Ins
 
 - `Dockerfile`: Multi-Stage-Build. `node-deps` installiert Node-Abhaengigkeiten; die Runtime enthaelt Node, Chromium, TeamSpeak, PulseAudio, Supervisor und noVNC, aber kein npm/git.
 - `docker-compose.yml`: Container-Konfiguration, persistentes Volume, noVNC-Port `6080`, ClientQuery-Relay-Port `25640`.
+- `Makefile`: Komfort-Targets fuer Compose. `make build` baut nur das Image; `make restart` baut und ersetzt den Container ohne Volume-Reset.
 - `bot/bridge-bot.js`: TeamSpeak-Textbefehle und WhatsApp-Web-Call-Automation.
 - `rootfs/etc/pulse/bridge.pa`: Virtuelle PulseAudio-Geraete und Audio-Routen.
 - `rootfs/etc/supervisor/conf.d/bridge.conf`: Prozessliste fuer Supervisor.
@@ -39,6 +40,13 @@ Der Standard-Prefix ist `!wa`.
 - `!wa hangup`: Aktiven Call beenden.
 
 `BRIDGE_CONTACT_GROUPS` ist eine JSON-Map aus lokal benannten Gruppen auf Telefonnummern, z. B. `{"support":["+491701234567","+491761234567"]}`. Das sind keine WhatsApp-Chatgruppen; `@g.us` bleibt absichtlich abgewiesen.
+
+## WhatsApp-Befehle
+
+- `!invite`: Wenn ein WhatsApp-Anruf aktiv ist, wird der Sender der WhatsApp-Nachricht in den laufenden Call eingeladen. Wenn kein Call aktiv ist, erfolgt keine Aktion. In WhatsApp-Gruppenchats gilt `message.author` als einzuladender Sender; die Gruppe selbst wird nicht eingeladen.
+
+`BRIDGE_WHATSAPP_INVITE_COMMAND` konfiguriert den WhatsApp-Textbefehl, Standard ist `!invite`.
+`BRIDGE_AUTO_ACCEPT_POLL_MS` konfiguriert den Poll-Fallback fuer eingehende Anrufe, Standard ist `5000`.
 
 ## Audio-Routing
 
@@ -62,7 +70,7 @@ Nach Codeaenderungen am Bot:
 ```bash
 node --check bot/bridge-bot.js
 docker compose config
-docker compose up -d --force-recreate --build
+make restart
 docker compose ps
 docker compose exec bridge supervisorctl status
 ```
@@ -89,6 +97,7 @@ Fuer das aktuelle Multi-Stage-Image ist `node` erwartet, `npm` und `git` in der 
 ## Build-/Betriebshinweise
 
 - Fuer normale Aenderungen `docker compose up -d --force-recreate --build` verwenden.
+- Alternativ `make restart` verwenden; `make build` baut nur das Image.
 - Kein Volume-Reset fuer Tests.
 - noVNC ist lokal auf `127.0.0.1:6080` gebunden.
 - ClientQuery ist extern als `127.0.0.1:25640` erreichbar und wird intern zum TeamSpeak-Plugin-Port weitergeleitet.
