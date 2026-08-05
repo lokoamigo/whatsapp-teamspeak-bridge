@@ -10,6 +10,10 @@ const CHROMIUM_EXECUTABLE =
     process.env.WWEBJS_CHROMIUM_EXECUTABLE || '/usr/bin/chromium';
 const CHROMIUM_PROFILE = process.env.WWEBJS_CHROMIUM_PROFILE || '/data/chromium';
 const COMMAND_PREFIX = process.env.BRIDGE_COMMAND_PREFIX || '!wa';
+const AUTO_ACCEPT_POLL_MS = Number.parseInt(
+    process.env.BRIDGE_AUTO_ACCEPT_POLL_MS || '1000',
+    10,
+);
 const BARE_COMMANDS = new Set([
     'help',
     'status',
@@ -38,6 +42,7 @@ const state = {
     activeCall: null,
     autoAcceptingCallIds: new Set(),
     autoAcceptedCallIds: new Set(),
+    lastAutoAcceptPollErrorAt: 0,
 };
 
 function sleep(ms) {
@@ -345,6 +350,10 @@ function extractCommand(message) {
 async function createWhatsAppClient() {
     const client = new Client({
         authStrategy: new NoAuth(),
+        webVersionCache: {
+            type: 'local',
+            path: '/data/wwebjs_cache',
+        },
         puppeteer: {
             executablePath: CHROMIUM_EXECUTABLE,
             headless: false,
@@ -381,6 +390,7 @@ async function createWhatsAppClient() {
     client.on('ready', () => {
         state.ready = true;
         state.whatsapp = null;
+        state.recoveredEventListenersAttached = true;
         console.log('WhatsApp Web.js bot is ready.');
     });
 
@@ -425,7 +435,44 @@ async function createWhatsAppClient() {
         });
     }, 5000);
     readyPoller.unref();
+
+    const autoAcceptPoller = setInterval(() => {
+        pollIncomingWhatsAppCall(client).catch((error) => {
+            const now = Date.now();
+            if (now - state.lastAutoAcceptPollErrorAt > 30000) {
+                console.error(`WhatsApp auto-accept poll failed: ${error.message}`);
+                state.lastAutoAcceptPollErrorAt = now;
+            }
+        });
+    }, AUTO_ACCEPT_POLL_MS);
+    autoAcceptPoller.unref();
+
     return client;
+}
+
+async function pollIncomingWhatsAppCall(client) {
+    if (!state.ready) {
+        await refreshWhatsAppReady(client);
+    }
+
+    const activeCall = await getActiveWhatsAppCall(client);
+    if (!activeCall || activeCall.fromMe) return;
+
+    const previousCallId = state.activeCallId;
+    state.activeCall = activeCall;
+    state.activeCallId = activeCall.id;
+
+    if (
+        activeCall.id &&
+        activeCall.id !== previousCallId &&
+        !state.autoAcceptedCallIds.has(activeCall.id)
+    ) {
+        console.log(
+            `WhatsApp incoming call detected by poller: id=${activeCall.id} from=${activeCall.from || 'unknown'} group=${activeCall.isGroup === true} video=${activeCall.isVideo === true}`,
+        );
+    }
+
+    autoAcceptIncomingCall(client, activeCall);
 }
 
 async function autoAcceptIncomingCall(client, call) {
@@ -441,7 +488,7 @@ async function autoAcceptIncomingCall(client, call) {
 
     state.autoAcceptingCallIds.add(callId);
     console.log(
-        `Auto-accept scheduled: id=${callId} from=${call.peerJid || 'unknown'} group=${call.isGroup === true} video=${call.isVideo === true}`,
+        `Auto-accept scheduled: id=${callId} from=${call.from || 'unknown'} group=${call.isGroup === true} video=${call.isVideo === true}`,
     );
 
     setTimeout(() => {
@@ -472,7 +519,10 @@ async function inspectWhatsAppRuntime(client) {
             hasSynced: null,
             wwebjs: false,
             startCall: false,
+            startGroupCall: false,
+            getActiveCall: false,
             acceptCall: false,
+            endCall: false,
             addParticipantToCall: false,
             info: null,
             reason: null,
@@ -484,12 +534,17 @@ async function inspectWhatsAppRuntime(client) {
             result.hasSynced = Socket.hasSynced === true;
             result.wwebjs = typeof window.WWebJS !== 'undefined';
             result.startCall = typeof window.WWebJS?.startCall === 'function';
+            result.startGroupCall =
+                typeof window.WWebJS?.startGroupCall === 'function';
+            result.getActiveCall =
+                typeof window.WWebJS?.getActiveCall === 'function';
             result.acceptCall = typeof window.WWebJS?.acceptCall === 'function';
+            result.endCall = typeof window.WWebJS?.endCall === 'function';
             result.addParticipantToCall =
                 typeof window.WWebJS?.addParticipantToCall === 'function';
-            result.ready = result.hasSynced && result.wwebjs && result.addParticipantToCall;
+            result.ready = result.hasSynced && result.wwebjs;
 
-            if (result.ready) {
+            if (result.hasSynced) {
                 result.info = {
                     ...window.require('WAWebConnModel').Conn.serialize(),
                     wid:
@@ -510,11 +565,12 @@ async function inspectWhatsAppRuntime(client) {
 }
 
 async function refreshWhatsAppReady(client) {
-    let runtime = await inspectWhatsAppRuntime(client);
+    const runtime = await inspectWhatsAppRuntime(client);
 
     state.whatsapp = runtime;
 
     if (!runtime.ready) {
+        state.ready = false;
         return false;
     }
 
@@ -532,7 +588,7 @@ async function refreshWhatsAppReady(client) {
 
     if (!state.ready) {
         console.log(
-            `WhatsApp Web.js recovered ready state: state=${runtime.state} hasSynced=${runtime.hasSynced} wwebjs=${runtime.wwebjs} addParticipantToCall=${runtime.addParticipantToCall}`,
+            `WhatsApp Web.js recovered ready state: state=${runtime.state} hasSynced=${runtime.hasSynced} wwebjs=${runtime.wwebjs} acceptCall=${runtime.acceptCall} addParticipantToCall=${runtime.addParticipantToCall}`,
         );
     }
     state.ready = true;
@@ -546,7 +602,6 @@ async function acceptActiveWhatsAppCall(waClient, call = null, options = {}) {
 
     for (let attempt = 1; attempt <= attempts; attempt += 1) {
         try {
-            if (!state.ready) await refreshWhatsAppReady(waClient);
             const acceptedCall =
                 call && typeof call.accept === 'function'
                     ? await call.accept()
@@ -571,7 +626,9 @@ function whatsappStatusText() {
         `state=${runtime.state || 'unknown'}`,
         `hasSynced=${runtime.hasSynced === true}`,
         `wwebjs=${runtime.wwebjs === true}`,
+        `getActiveCallApi=${runtime.getActiveCall === true}`,
         `acceptApi=${runtime.acceptCall === true}`,
+        `endApi=${runtime.endCall === true}`,
         `callApi=${runtime.addParticipantToCall === true}`,
         runtime.reason ? `reason=${runtime.reason}` : null,
     ]
@@ -608,10 +665,6 @@ async function handleCommand(waClient, args) {
             state.whatsapp = { ready: false, reason: error.message };
         });
         return `WhatsApp ${whatsappStatusText()} activeCall=${state.activeCallId || 'unknown'}`;
-    }
-
-    if (!state.ready && !(await refreshWhatsAppReady(waClient))) {
-        throw new Error(`WhatsApp Web.js is not ready yet (${whatsappStatusText()}).`);
     }
 
     if (command === 'add') {
