@@ -1,5 +1,6 @@
 'use strict';
 
+const http = require('http');
 const net = require('net');
 const { Client, ClientInfo, NoAuth } = require('whatsapp-web.js');
 
@@ -12,6 +13,11 @@ const CHROMIUM_PROFILE = process.env.WWEBJS_CHROMIUM_PROFILE || '/data/chromium'
 const COMMAND_PREFIX = process.env.BRIDGE_COMMAND_PREFIX || '!wa';
 const WHATSAPP_INVITE_COMMAND =
     process.env.BRIDGE_WHATSAPP_INVITE_COMMAND || '!invite';
+const API_HOST = process.env.BRIDGE_API_HOST || '0.0.0.0';
+const API_PORT = Math.max(
+    1,
+    Number.parseInt(process.env.BRIDGE_API_PORT || '8080', 10) || 8080,
+);
 const AUTO_ACCEPT_POLL_MS = Math.max(
     1000,
     Number.parseInt(process.env.BRIDGE_AUTO_ACCEPT_POLL_MS || '5000', 10) ||
@@ -180,8 +186,91 @@ async function getActiveWhatsAppCallId(waClient) {
     const activeCallId = activeCall?.id || null;
 
     state.activeCallId = activeCallId;
-    if (!activeCallId) state.activeCall = null;
+    state.activeCall = activeCall || null;
     return activeCallId;
+}
+
+function getCallParticipantCount(call) {
+    const participants = call?.participants;
+    if (Array.isArray(participants)) return participants.length;
+    if (participants && typeof participants === 'object') {
+        return Object.keys(participants).length;
+    }
+    return null;
+}
+
+function sendApiJson(response, statusCode, payload) {
+    const body = JSON.stringify(payload);
+    response.writeHead(statusCode, {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Content-Length': Buffer.byteLength(body),
+        'Cache-Control': 'no-store',
+    });
+    response.end(body);
+}
+
+function createApiServer(waClient) {
+    // Keep endpoints in a registry so additional API versions and resources can
+    // be added without turning the bot's main flow into a routing switch.
+    const routes = new Map([
+        [
+            'GET /api/v1/health',
+            async () => ({
+                statusCode: 200,
+                body: { ready: state.ready },
+            }),
+        ],
+        [
+            'GET /api/v1/calls/active/participants',
+            async () => {
+                const activeCall = await getActiveWhatsAppCall(waClient);
+                state.activeCall = activeCall || null;
+                state.activeCallId = activeCall?.id || null;
+
+                const participantCount = activeCall
+                    ? getCallParticipantCount(activeCall)
+                    : 0;
+                return {
+                    statusCode: 200,
+                    body: {
+                        active: Boolean(activeCall),
+                        callId: activeCall?.id || null,
+                        participantCount,
+                    },
+                };
+            },
+        ],
+    ]);
+
+    const server = http.createServer(async (request, response) => {
+        const method = request.method || 'GET';
+        const pathname = new URL(request.url || '/', 'http://localhost').pathname;
+        const handler = routes.get(`${method} ${pathname}`);
+
+        if (!handler) {
+            sendApiJson(response, 404, { error: 'Not found.' });
+            return;
+        }
+
+        try {
+            const result = await handler();
+            sendApiJson(response, result.statusCode, result.body);
+        } catch (error) {
+            console.error(`Bridge API ${method} ${pathname} failed: ${error.message}`);
+            sendApiJson(response, 503, {
+                error: 'WhatsApp call status is temporarily unavailable.',
+            });
+        }
+    });
+
+    server.listen(API_PORT, API_HOST, () => {
+        console.log(`Bridge API listening on http://${API_HOST}:${API_PORT}`);
+    });
+    server.on('error', (error) => {
+        console.error(`Bridge API server error: ${error.message}`);
+    });
+
+    return server;
 }
 
 async function addParticipantsToActiveCall(waClient, contactIds) {
@@ -783,6 +872,7 @@ async function handleCommand(waClient, args) {
 
 async function main() {
     const waClient = await createWhatsAppClient();
+    createApiServer(waClient);
 
     if (!TS_API_KEY) {
         console.log('TS3_CLIENTQUERY_API_KEY is not set; WhatsApp is running without TeamSpeak command control.');

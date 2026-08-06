@@ -150,6 +150,7 @@ BRIDGE_COMMANDER_UIDS=abcDEFghiJklMNOpqrSTUvwxYz=,zweiteUid=
 BRIDGE_CONTACT_GROUPS={"support":["+491701234567","+491761234567"]}
 BRIDGE_WHATSAPP_INVITE_COMMAND=!invite
 BRIDGE_AUTO_ACCEPT_POLL_MS=5000
+BRIDGE_API_PORT=8080
 ```
 
 Bleibt `BRIDGE_COMMANDER_UIDS` leer, darf jeder TeamSpeak-Nutzer Befehle
@@ -186,6 +187,31 @@ Fallback fuer den aktuell sichtbaren eingehenden Anruf verfuegbar. `!wa call
 <gruppe>` und `!wa callgroup <gruppe>` nutzen keine WhatsApp-Chatgruppe,
 sondern die in `BRIDGE_CONTACT_GROUPS` definierte Liste einzelner Kontakte.
 WhatsApp-Gruppen-IDs (`@g.us`) werden weiterhin abgewiesen.
+
+## HTTP-API
+
+Die Bridge stellt eine kleine versionierte JSON-API bereit, die standardmäßig
+nur auf dem Docker-Host unter `127.0.0.1:8080` erreichbar ist. Der Port kann
+mit `BRIDGE_API_PORT` geändert werden.
+
+Den aktuellen Call-Teilnehmerstand liefert:
+
+```bash
+curl http://127.0.0.1:8080/api/v1/calls/active/participants
+```
+
+Beispielantwort bei aktivem Call:
+
+```json
+{"active":true,"callId":"...","participantCount":3}
+```
+
+Ohne aktiven Call ist `active` `false` und `participantCount` `0`. Wenn
+WhatsApp Web die Teilnehmerliste für einen aktiven Call vorübergehend nicht
+bereitstellt, ist `participantCount` `null` statt einer geschätzten Zahl. Für
+einfache Erreichbarkeitsprüfungen steht außerdem `GET /api/v1/health` bereit.
+Die versionierte Route-Registry im Bot ist der vorgesehene Erweiterungspunkt
+für weitere API-Funktionen.
 
 WhatsApp-Nachricht an den Bridge-Account:
 

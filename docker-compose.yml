@@ -21,12 +21,14 @@ services:
       BRIDGE_CONTACT_GROUPS: "${BRIDGE_CONTACT_GROUPS:-{}}"
       BRIDGE_WHATSAPP_INVITE_COMMAND: "${BRIDGE_WHATSAPP_INVITE_COMMAND:-!invite}"
       BRIDGE_AUTO_ACCEPT_POLL_MS: "${BRIDGE_AUTO_ACCEPT_POLL_MS:-5000}"
+      BRIDGE_API_PORT: "${BRIDGE_API_PORT:-8080}"
       WWEBJS_CHROMIUM_EXECUTABLE: "/usr/bin/chromium"
       WWEBJS_CHROMIUM_PROFILE: "/data/chromium"
     ports:
       # Sicherer Standard: nur auf dem Docker-Host erreichbar. Für Fernzugriff SSH-Tunnel nutzen.
       - "127.0.0.1:${NOVNC_PORT:-6080}:6080"
       - "127.0.0.1:${CLIENTQUERY_PORT:-25640}:25640"
+      - "127.0.0.1:${BRIDGE_API_PORT:-8080}:${BRIDGE_API_PORT:-8080}"
     volumes:
       - bridge-data:/data
 
