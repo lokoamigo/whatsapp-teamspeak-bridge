@@ -9,7 +9,7 @@
     "start": "node bot/bridge-bot.js"
   },
   "dependencies": {
-    "whatsapp-web.js": "https://github.com/lokoamigo/whatsapp-web.js-new-calling-feature/archive/63d1f8bbfe6728e3a5faac4f95d64c1ff0a1f5f8.tar.gz"
+    "whatsapp-web.js": "https://github.com/lokoamigo/whatsapp-web.js-new-calling-feature/archive/5751e52a803bc1a307a18187193fa5f02da5ff57.tar.gz"
   },
   "engines": {
     "node": ">=18.0.0"
