@@ -203,15 +203,17 @@ curl http://127.0.0.1:8080/api/v1/calls/active/participants
 Beispielantwort bei aktivem Call:
 
 ```json
-{"active":true,"callId":"...","participantCount":3}
+{"active":true,"callId":"...","participantCount":3,"totalParticipantCount":4}
 ```
 
 Ohne aktiven Call ist `active` `false` und `participantCount` `0`. Wenn
 WhatsApp Web die Teilnehmerliste für einen aktiven Call vorübergehend nicht
 bereitstellt, ist `participantCount` `null` statt einer geschätzten Zahl. Der
 Wert wird über die öffentliche Call-API des gepinnten `whatsapp-web.js`-Forks
-ermittelt. Für einfache Erreichbarkeitsprüfungen steht außerdem
-`GET /api/v1/health` bereit.
+ermittelt. `participantCount` zählt ausschließlich die anderen Call-Teilnehmer;
+der Bridge-Account wird abgezogen. `totalParticipantCount` enthält die
+unveränderte WhatsApp-Gesamtzahl einschließlich Bridge. Für einfache
+Erreichbarkeitsprüfungen steht außerdem `GET /api/v1/health` bereit.
 Die versionierte Route-Registry im Bot ist der vorgesehene Erweiterungspunkt
 für weitere API-Funktionen.
 

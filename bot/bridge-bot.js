@@ -195,14 +195,32 @@ async function getLiveWhatsAppCallStatus(waClient) {
     state.activeCall = activeCall || null;
     state.activeCallId = activeCall?.id || null;
     if (!activeCall) {
-        return { active: false, callId: null, participantCount: 0 };
+        return {
+            active: false,
+            callId: null,
+            participantCount: 0,
+            totalParticipantCount: 0,
+        };
     }
 
-    const participantCount = await waClient.getActiveCallParticipantCount();
+    const reportedParticipantCount =
+        await waClient.getActiveCallParticipantCount();
+    const totalParticipantCount =
+        Number.isSafeInteger(reportedParticipantCount) &&
+        reportedParticipantCount >= 0
+            ? reportedParticipantCount
+            : null;
     return {
         active: true,
         callId: activeCall.id || null,
-        participantCount,
+        // The fork returns WhatsApp's complete roster, including this bridge
+        // account. This API's participantCount is intentionally the number of
+        // remote players; retain the raw total for callers that need it.
+        participantCount:
+            totalParticipantCount === null
+                ? null
+                : Math.max(0, totalParticipantCount - 1),
+        totalParticipantCount,
     };
 }
 
