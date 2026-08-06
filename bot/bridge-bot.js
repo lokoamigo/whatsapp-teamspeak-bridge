@@ -190,13 +190,20 @@ async function getActiveWhatsAppCallId(waClient) {
     return activeCallId;
 }
 
-function getCallParticipantCount(call) {
-    const participants = call?.participants;
-    if (Array.isArray(participants)) return participants.length;
-    if (participants && typeof participants === 'object') {
-        return Object.keys(participants).length;
+async function getLiveWhatsAppCallStatus(waClient) {
+    const activeCall = await getActiveWhatsAppCall(waClient);
+    state.activeCall = activeCall || null;
+    state.activeCallId = activeCall?.id || null;
+    if (!activeCall) {
+        return { active: false, callId: null, participantCount: 0 };
     }
-    return null;
+
+    const participantCount = await waClient.getActiveCallParticipantCount();
+    return {
+        active: true,
+        callId: activeCall.id || null,
+        participantCount,
+    };
 }
 
 function sendApiJson(response, statusCode, payload) {
@@ -223,20 +230,10 @@ function createApiServer(waClient) {
         [
             'GET /api/v1/calls/active/participants',
             async () => {
-                const activeCall = await getActiveWhatsAppCall(waClient);
-                state.activeCall = activeCall || null;
-                state.activeCallId = activeCall?.id || null;
-
-                const participantCount = activeCall
-                    ? getCallParticipantCount(activeCall)
-                    : 0;
+                const callStatus = await getLiveWhatsAppCallStatus(waClient);
                 return {
                     statusCode: 200,
-                    body: {
-                        active: Boolean(activeCall),
-                        callId: activeCall?.id || null,
-                        participantCount,
-                    },
+                    body: callStatus,
                 };
             },
         ],

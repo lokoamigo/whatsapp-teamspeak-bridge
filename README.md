@@ -208,8 +208,10 @@ Beispielantwort bei aktivem Call:
 
 Ohne aktiven Call ist `active` `false` und `participantCount` `0`. Wenn
 WhatsApp Web die Teilnehmerliste für einen aktiven Call vorübergehend nicht
-bereitstellt, ist `participantCount` `null` statt einer geschätzten Zahl. Für
-einfache Erreichbarkeitsprüfungen steht außerdem `GET /api/v1/health` bereit.
+bereitstellt, ist `participantCount` `null` statt einer geschätzten Zahl. Der
+Wert wird über die öffentliche Call-API des gepinnten `whatsapp-web.js`-Forks
+ermittelt. Für einfache Erreichbarkeitsprüfungen steht außerdem
+`GET /api/v1/health` bereit.
 Die versionierte Route-Registry im Bot ist der vorgesehene Erweiterungspunkt
 für weitere API-Funktionen.
 
