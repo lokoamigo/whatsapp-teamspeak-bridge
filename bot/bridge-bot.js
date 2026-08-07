@@ -2,11 +2,12 @@
 
 const http = require('http');
 const net = require('net');
-const { Client, ClientInfo, NoAuth } = require('whatsapp-web.js');
+const { Client, ClientInfo, NoAuth, Poll } = require('whatsapp-web.js');
 
 const TS_HOST = process.env.TS3_CLIENTQUERY_HOST || '127.0.0.1';
 const TS_PORT = Number.parseInt(process.env.TS3_CLIENTQUERY_PORT || '25639', 10);
 const TS_API_KEY = (process.env.TS3_CLIENTQUERY_API_KEY || '').trim();
+const TS3_URI = process.env.TS3_URI || '';
 const CHROMIUM_EXECUTABLE =
     process.env.WWEBJS_CHROMIUM_EXECUTABLE || '/usr/bin/chromium';
 const CHROMIUM_PROFILE = process.env.WWEBJS_CHROMIUM_PROFILE || '/data/chromium';
@@ -18,6 +19,19 @@ const API_PORT = Math.max(
     1,
     Number.parseInt(process.env.BRIDGE_API_PORT || '8080', 10) || 8080,
 );
+const WHATSAPP_SWITCH_CHANNEL_COMMAND = '!switchchannel';
+const WHATSAPP_SWITCH_CHANNEL_COMMAND_TYPO = '!switchcahnnel';
+const CHANNEL_POLL_MAX_OPTIONS = Math.min(
+    12,
+    Math.max(
+        2,
+        Number.parseInt(
+            process.env.BRIDGE_WHATSAPP_CHANNEL_POLL_MAX_OPTIONS || '12',
+            10,
+        ) || 12,
+    ),
+);
+const SHOW_MORE_CHANNELS_OPTION = 'show more channels';
 const AUTO_ACCEPT_POLL_MS = Math.max(
     1000,
     Number.parseInt(process.env.BRIDGE_AUTO_ACCEPT_POLL_MS || '5000', 10) ||
@@ -52,6 +66,9 @@ const state = {
     autoAcceptingCallIds: new Set(),
     autoAcceptedCallIds: new Set(),
     lastAutoAcceptPollErrorAt: 0,
+    clientQuery: null,
+    channelPolls: new Map(),
+    pendingChannelPolls: [],
 };
 
 function sleep(ms) {
@@ -104,6 +121,34 @@ function tsUnescape(value) {
     });
 }
 
+function getTeamSpeakConnectConfig() {
+    if (!TS3_URI) {
+        throw new Error('TS3_URI is required for reconnect-based channel switching.');
+    }
+
+    let url;
+    try {
+        url = new URL(TS3_URI);
+    } catch (error) {
+        throw new Error(`TS3_URI is not a valid TeamSpeak URI: ${error.message}`);
+    }
+
+    if (url.protocol !== 'ts3server:') {
+        throw new Error(`Unsupported TeamSpeak URI protocol: ${url.protocol}`);
+    }
+
+    const port = url.searchParams.get('port') || url.port;
+    const address = port ? `${url.hostname}:${port}` : url.hostname;
+    if (!address) throw new Error('TS3_URI does not contain a TeamSpeak server address.');
+
+    return {
+        address,
+        nickname: url.searchParams.get('nickname') || '',
+        password: url.searchParams.get('password') || '',
+        token: url.searchParams.get('token') || '',
+    };
+}
+
 function parseTsLine(line) {
     const fields = {};
     for (const token of line.trim().split(' ')) {
@@ -114,6 +159,17 @@ function parseTsLine(line) {
     return fields;
 }
 
+function parseTsRows(lines) {
+    const rows = [];
+    for (const line of lines) {
+        if (!line || line.startsWith('error ')) continue;
+        for (const row of line.split('|')) {
+            if (row.trim()) rows.push(parseTsLine(row));
+        }
+    }
+    return rows;
+}
+
 function parseArgs(input) {
     const args = [];
     const regex = /"([^"\\]*(?:\\.[^"\\]*)*)"|'([^'\\]*(?:\\.[^'\\]*)*)'|(\S+)/g;
@@ -122,6 +178,68 @@ function parseArgs(input) {
         args.push((match[1] || match[2] || match[3]).replace(/\\(["'])/g, '$1'));
     }
     return args;
+}
+
+function getMessageIdAliases(message) {
+    return Array.from(
+        new Set(
+            [
+                message?.id?._serialized,
+                message?.id?.id,
+                typeof message?.id === 'string' ? message.id : null,
+            ].filter(Boolean),
+        ),
+    );
+}
+
+function getMessageSenderId(message) {
+    return message.author || message.from || null;
+}
+
+function getMessageChatId(message) {
+    return message.fromMe ? message.to || message.from : message.from;
+}
+
+function getVotePollIdAliases(vote) {
+    return Array.from(
+        new Set(
+            [
+                vote?.parentMsgKey?._serialized,
+                vote?.parentMsgKey?.id,
+                typeof vote?.parentMsgKey === 'string' ? vote.parentMsgKey : null,
+                vote?.parentMessage?.id?._serialized,
+                vote?.parentMessage?.id?.id,
+                typeof vote?.parentMessage?.id === 'string'
+                    ? vote.parentMessage.id
+                    : null,
+            ].filter(Boolean),
+        ),
+    );
+}
+
+function getPollOptionNames(message) {
+    return (message?.pollOptions || [])
+        .map((option) => option.name)
+        .filter((name) => typeof name === 'string');
+}
+
+function parseWhatsAppSwitchChannelCommand(body) {
+    const trimmed = String(body || '').trim();
+    const lower = trimmed.toLowerCase();
+    for (const command of [
+        WHATSAPP_SWITCH_CHANNEL_COMMAND,
+        WHATSAPP_SWITCH_CHANNEL_COMMAND_TYPO,
+    ]) {
+        if (lower === command) return { channelName: '' };
+        if (lower.startsWith(`${command} `)) {
+            return { channelName: trimmed.slice(command.length).trim() };
+        }
+    }
+    return null;
+}
+
+function isSwitchableChannelName(name) {
+    return !String(name || '').trim().toLowerCase().startsWith('[spacer');
 }
 
 function normalizeContactId(input) {
@@ -443,7 +561,7 @@ class ClientQuery {
         const whoami = await this.command('whoami');
         const whoamiLine = whoami.find((line) => !line.startsWith('error ')) || '';
         const state = parseTsLine(whoamiLine);
-        this.ownClientId = state.clid || this.ownClientId;
+        this.ownClientId = state.clid || state.sclid || this.ownClientId;
         if (this.currentSchandlerid) await this.registerTextMessages(this.currentSchandlerid);
     }
 
@@ -453,6 +571,107 @@ class ClientQuery {
         await this.command(
             `sendtextmessage targetmode=1 target=${target} msg=${tsEscape(message)}`,
         );
+    }
+
+    async getOwnClientInfo() {
+        const lines = await this.command('whoami');
+        const line = lines.find((entry) => !entry.startsWith('error ')) || '';
+        const info = parseTsLine(line);
+        this.ownClientId = info.clid || info.sclid || this.ownClientId;
+        return info;
+    }
+
+    async listChannels() {
+        const rows = parseTsRows(await this.command('channellist'));
+        return rows
+            .filter((row) => row.cid && row.channel_name)
+            .map((row) => ({
+                id: row.cid,
+                name: row.channel_name,
+                parentId: row.pid || '0',
+                order: Number.parseInt(row.channel_order || '0', 10) || 0,
+            }))
+            .filter((channel) => isSwitchableChannelName(channel.name));
+    }
+
+    async listSwitchableChannels() {
+        const [ownInfo, channels] = await Promise.all([
+            this.getOwnClientInfo(),
+            this.listChannels(),
+        ]);
+        const currentChannelId = ownInfo.cid || ownInfo.client_channel_id || null;
+        return channels.filter((channel) => channel.id !== currentChannelId);
+    }
+
+    async moveSelfToChannel(channel) {
+        const channelId = typeof channel === 'object' ? channel.id : channel;
+        const channelName = typeof channel === 'object' ? channel.name : '';
+        const ownInfo = await this.getOwnClientInfo();
+        const clientId = ownInfo.clid || ownInfo.sclid || this.ownClientId;
+        if (!clientId) throw new Error('Could not determine TeamSpeak client ID.');
+        await this.command(
+            `clientmove cid=${tsEscape(channelId)} clid=${tsEscape(clientId)}`,
+        );
+        await sleep(500);
+
+        const movedInfo = await this.getOwnClientInfo();
+        const movedChannelId = movedInfo.cid || movedInfo.client_channel_id || null;
+        if (movedChannelId === channelId) return;
+
+        if (!channelName) {
+            throw new Error(
+                `TeamSpeak still reports current channel ${movedChannelId || 'unknown'} after moving to ${channelId}.`,
+            );
+        }
+
+        console.log(
+            `TeamSpeak clientmove returned OK but stayed in ${movedChannelId || 'unknown'}; reconnecting to channel ${channelName} (${channelId}).`,
+        );
+        await this.reconnectToChannel(channel);
+    }
+
+    async reconnectToChannel(channel) {
+        const config = getTeamSpeakConnectConfig();
+        const connectParts = [
+            `connect address=${tsEscape(config.address)}`,
+            config.nickname ? `nickname=${tsEscape(config.nickname)}` : '',
+            config.password ? `password=${tsEscape(config.password)}` : '',
+            config.token ? `token=${tsEscape(config.token)}` : '',
+            `channel=${tsEscape(channel.name)}`,
+        ].filter(Boolean);
+
+        try {
+            await this.command('disconnect msg=Switching\\schannel');
+        } catch (error) {
+            if (!error.message.includes('not\\sconnected')) throw error;
+        }
+
+        let lastConnectError = null;
+        for (let attempt = 0; attempt < 8; attempt += 1) {
+            await sleep(attempt === 0 ? 1000 : 1500);
+            try {
+                await this.command(connectParts.join(' '));
+                lastConnectError = null;
+                break;
+            } catch (error) {
+                lastConnectError = error;
+                if (!error.message.includes('currently\\snot\\spossible')) throw error;
+            }
+        }
+        if (lastConnectError) throw lastConnectError;
+
+        for (let attempt = 0; attempt < 15; attempt += 1) {
+            await sleep(1000);
+            try {
+                const info = await this.getOwnClientInfo();
+                const currentChannelId = info.cid || info.client_channel_id || null;
+                if (currentChannelId === channel.id) return;
+            } catch (error) {
+                if (!error.message.includes('not\\sconnected')) throw error;
+            }
+        }
+
+        throw new Error(`TeamSpeak did not reconnect to channel ${channel.name}.`);
     }
 }
 
@@ -475,6 +694,7 @@ function extractCommand(message) {
 async function createWhatsAppClient() {
     const client = new Client({
         authStrategy: new NoAuth(),
+        userAgent: false,
         webVersionCache: {
             type: 'local',
             path: '/data/wwebjs_cache',
@@ -517,6 +737,19 @@ async function createWhatsAppClient() {
         state.whatsapp = null;
         state.recoveredEventListenersAttached = true;
         console.log('WhatsApp Web.js bot is ready.');
+        client.pupPage
+            .evaluate(() => navigator.userAgent)
+            .then((userAgent) => {
+                console.log(`WhatsApp Web runtime user agent: ${userAgent}`);
+            })
+            .catch((error) => {
+                console.error(
+                    `Could not read WhatsApp Web runtime user agent: ${error.message}`,
+                );
+            });
+        attachWhatsAppPollVoteBridge(client).catch((error) => {
+            console.error(`Could not attach WhatsApp poll vote bridge: ${error.message}`);
+        });
     });
 
     client.on('authenticated', () => {
@@ -554,6 +787,16 @@ async function createWhatsAppClient() {
         });
     });
 
+    client.on('message_create', (message) => {
+        handleWhatsAppMessageCreate(message);
+    });
+
+    client.on('vote_update', (vote) => {
+        handleWhatsAppPollVote(client, vote).catch((error) => {
+            console.error(`WhatsApp poll vote handler failed: ${error.message}`);
+        });
+    });
+
     await client.initialize();
     await refreshWhatsAppReady(client);
     const readyPoller = setInterval(() => {
@@ -585,6 +828,12 @@ async function handleWhatsAppMessage(client, message) {
     if (message.fromMe) return;
 
     const body = String(message.body || '').trim();
+    const switchCommand = parseWhatsAppSwitchChannelCommand(body);
+    if (switchCommand) {
+        await handleWhatsAppSwitchChannelCommand(client, message, switchCommand);
+        return;
+    }
+
     if (body.toLowerCase() !== WHATSAPP_INVITE_COMMAND.toLowerCase()) return;
 
     const activeCallId = await getActiveWhatsAppCallId(client);
@@ -602,6 +851,493 @@ async function handleWhatsAppMessage(client, message) {
     await client.addParticipantToCall(contactId, activeCallId);
     console.log(
         `Invited WhatsApp message sender ${contactId} to active call: ${activeCallId}`,
+    );
+}
+
+async function attachWhatsAppPollVoteBridge(client) {
+    if (!client.pupPage || client.pupPage.isClosed()) return;
+
+    if (typeof client.pupPage.exposeFunction === 'function') {
+        try {
+            await client.pupPage.exposeFunction('__bridgePollVoteBulkUpsert', (event) => {
+                handleWhatsAppPollVoteBulkUpsert(client, event).catch((error) => {
+                    console.error(
+                        `WhatsApp poll bulk-upsert handler failed: ${error.message}`,
+                    );
+                });
+            });
+        } catch (error) {
+            if (!/already|exist/i.test(error.message)) throw error;
+        }
+    }
+
+    const bridgeStatus = await client.pupPage.evaluate(() => {
+        const result = {
+            wwebjs: typeof window.WWebJS !== 'undefined',
+            hookAttached: false,
+            modulePresent: false,
+        };
+
+        let pollVoteModule = null;
+        try {
+            pollVoteModule = window.require('WAWebAddonPollVoteTableMode');
+            result.modulePresent = true;
+        } catch (error) {
+            result.error = error.message;
+            return result;
+        }
+
+        const mode = pollVoteModule?.pollVoteTableMode;
+        if (
+            mode &&
+            typeof mode.bulkUpsert === 'function' &&
+            !mode.bulkUpsert.__bridgePollVoteBridgeWrapped
+        ) {
+            const original = mode.bulkUpsert;
+            mode.bulkUpsert = function (...args) {
+                const keyValues = (key) => {
+                    if (!key) return [];
+                    const values = [
+                        key._serialized,
+                        key.id,
+                        typeof key.toString === 'function' ? key.toString() : null,
+                    ].filter(Boolean);
+                    return Array.from(new Set(values.map(String)));
+                };
+                const jidValue = (jid) => {
+                    return jid?._serialized || jid?.user || jid?.server || null;
+                };
+                const selectedIds = (value) => {
+                    if (!value) return [];
+                    if (value instanceof Uint8Array) return Array.from(value);
+                    if (Array.isArray(value)) return value;
+                    if (typeof value === 'object') {
+                        return Object.keys(value)
+                            .sort((left, right) => Number(left) - Number(right))
+                            .map((key) => value[key]);
+                    }
+                    return [];
+                };
+                const events = (Array.isArray(args[0]) ? args[0] : []).map((vote) => ({
+                    id: keyValues(vote.id),
+                    parentKeys: [
+                        ...keyValues(vote.pollUpdateParentKey),
+                        ...keyValues(vote.parentMsgKey),
+                    ],
+                    chatIds: [
+                        jidValue(vote.from),
+                        jidValue(vote.to),
+                    ].filter(Boolean),
+                    voter:
+                        jidValue(vote.author) ||
+                        jidValue(vote.from) ||
+                        vote.senderUserJid ||
+                        null,
+                    selectedOptionLocalIds: selectedIds(vote.selectedOptionLocalIds),
+                    lastSuccessfulSelectedOptionLocalIds: selectedIds(
+                        vote.lastSuccessfulSelectedOptionLocalIds,
+                    ),
+                    senderTimestampMs: vote.senderTimestampMs || vote.t || null,
+                }));
+                try {
+                    for (const event of events) {
+                        window.__bridgePollVoteBulkUpsert(event);
+                    }
+                } catch (error) {
+                    console.error(`Bridge poll vote handler failed: ${error.message}`);
+                }
+                return original.apply(this, args);
+            };
+            mode.bulkUpsert.__bridgePollVoteBridgeWrapped = true;
+            result.hookAttached = true;
+        }
+
+        return result;
+    });
+
+    console.log(`WhatsApp poll vote bridge attached: ${JSON.stringify(bridgeStatus)}`);
+}
+
+function requireClientQuery() {
+    const query = state.clientQuery;
+    if (!query || !query.socket || query.socket.destroyed) {
+        throw new Error('TeamSpeak ClientQuery is not connected.');
+    }
+    return query;
+}
+
+function findChannelByName(channels, requestedName) {
+    const normalized = requestedName.trim().toLowerCase();
+    return channels.filter((channel) => channel.name.toLowerCase() === normalized);
+}
+
+function channelPollOptionName(channel, duplicateNames) {
+    if (!duplicateNames.has(channel.name.toLowerCase())) return channel.name;
+    return `${channel.name} [cid ${channel.id}]`;
+}
+
+function getDuplicateChannelNames(channels) {
+    const counts = new Map();
+    for (const channel of channels) {
+        const normalized = channel.name.toLowerCase();
+        counts.set(normalized, (counts.get(normalized) || 0) + 1);
+    }
+    return new Set(
+        Array.from(counts.entries())
+            .filter(([, count]) => count > 1)
+            .map(([name]) => name),
+    );
+}
+
+function buildChannelPollState(chatId, requestedBy, page, pageChannels, hasMore, options) {
+    return {
+        chatId,
+        requestedBy,
+        page,
+        channels: pageChannels,
+        hasMore,
+        options,
+        createdAt: Date.now(),
+    };
+}
+
+function registerChannelPollIds(pollIds, pollState, pollMessage = null) {
+    const ids = Array.from(new Set((pollIds || []).filter(Boolean)));
+    if (ids.length === 0) return false;
+    pollState.pollIds = Array.from(
+        new Set([...(pollState.pollIds || []), ...ids]),
+    );
+    if (pollMessage) pollState.pollMessage = pollMessage;
+    for (const pollId of ids) {
+        state.channelPolls.set(pollId, pollState);
+    }
+    pruneChannelPolls();
+    console.log(
+        `Tracking TeamSpeak channel poll ${ids.join(',')} for chat=${pollState.chatId} page=${pollState.page}`,
+    );
+    return true;
+}
+
+function registerChannelPoll(pollId, pollState, pollMessage = null) {
+    return registerChannelPollIds([pollId], pollState, pollMessage);
+}
+
+function queuePendingChannelPoll(pollState) {
+    state.pendingChannelPolls.push(pollState);
+    pruneChannelPolls();
+    console.log(
+        `Waiting for outgoing TeamSpeak channel poll ID for chat=${pollState.chatId} page=${pollState.page}`,
+    );
+}
+
+function clearActiveChannelPollsForChat(chatId) {
+    for (const pollState of getTrackedChannelPollStates()) {
+        if (pollState.chatId !== chatId || pollState.completed) continue;
+        pollState.completed = true;
+        deleteChannelPollState(pollState);
+    }
+    state.pendingChannelPolls = state.pendingChannelPolls.filter((pollState) => {
+        return pollState.chatId !== chatId || pollState.completed;
+    });
+}
+
+function removePendingChannelPoll(pollState) {
+    const index = state.pendingChannelPolls.indexOf(pollState);
+    if (index !== -1) state.pendingChannelPolls.splice(index, 1);
+}
+
+function deleteChannelPollState(pollState) {
+    for (const pollId of pollState.pollIds || []) {
+        state.channelPolls.delete(pollId);
+    }
+}
+
+function getTrackedChannelPollStates() {
+    return Array.from(new Set(state.channelPolls.values()));
+}
+
+function optionListsMatch(left, right) {
+    if (left.length !== right.length) return false;
+    return left.every((value, index) => value === right[index]);
+}
+
+function handleWhatsAppMessageCreate(message) {
+    if (!message.fromMe || state.pendingChannelPolls.length === 0) return;
+    if (message.pollName && message.pollName !== 'Switch TeamSpeak channel') return;
+
+    const pollIds = getMessageIdAliases(message);
+    const pollId = pollIds[0] || null;
+    if (!pollId) {
+        console.error('Outgoing TeamSpeak channel poll still has no message ID.');
+        return;
+    }
+
+    const chatId = getMessageChatId(message);
+    const options = getPollOptionNames(message);
+    let pendingIndex = state.pendingChannelPolls.findIndex((pollState) => {
+        return pollState.chatId === chatId && optionListsMatch(pollState.options, options);
+    });
+    if (pendingIndex === -1 && options.length === 0) {
+        const chatPending = state.pendingChannelPolls
+            .map((pollState, index) => ({ pollState, index }))
+            .filter(({ pollState }) => pollState.chatId === chatId);
+        if (chatPending.length === 1) pendingIndex = chatPending[0].index;
+    }
+    if (pendingIndex === -1) return;
+
+    const [pollState] = state.pendingChannelPolls.splice(pendingIndex, 1);
+    registerChannelPollIds(pollIds, pollState, message);
+}
+
+async function switchToChannelByName(channelName) {
+    if (!channelName) throw new Error('Missing TeamSpeak channel name.');
+
+    const query = requireClientQuery();
+    const channels = await query.listSwitchableChannels();
+    const matches = findChannelByName(channels, channelName);
+    if (matches.length === 0) {
+        throw new Error(`TeamSpeak channel not found or already active: ${channelName}`);
+    }
+    if (matches.length > 1) {
+        throw new Error(`TeamSpeak channel name is ambiguous: ${channelName}`);
+    }
+
+    await query.moveSelfToChannel(matches[0]);
+    return matches[0];
+}
+
+async function sendChannelSwitchPoll(client, chatId, requestedBy, page = 0) {
+    if (typeof Poll !== 'function') {
+        throw new Error('The configured whatsapp-web.js build does not expose Poll support.');
+    }
+
+    const query = requireClientQuery();
+    const channels = await query.listSwitchableChannels();
+    if (channels.length === 0) {
+        await client.sendMessage(chatId, 'No other TeamSpeak channels are available.');
+        return;
+    }
+
+    const channelSlots = CHANNEL_POLL_MAX_OPTIONS - 1;
+    const start = page * channelSlots;
+    const pageChannels = channels.slice(start, start + channelSlots);
+    if (pageChannels.length === 0) {
+        await client.sendMessage(chatId, 'No more TeamSpeak channels are available.');
+        return;
+    }
+
+    const hasMore = start + pageChannels.length < channels.length;
+    const duplicateNames = getDuplicateChannelNames(channels);
+    const options = pageChannels.map((channel) =>
+        channelPollOptionName(channel, duplicateNames),
+    );
+    if (hasMore) options.push(SHOW_MORE_CHANNELS_OPTION);
+
+    const poll = new Poll('Switch TeamSpeak channel', options, {
+        allowMultipleAnswers: false,
+    });
+    if (page === 0) clearActiveChannelPollsForChat(chatId);
+    const pollState = buildChannelPollState(
+        chatId,
+        requestedBy,
+        page,
+        pageChannels,
+        hasMore,
+        options,
+    );
+    queuePendingChannelPoll(pollState);
+    const sentMessage = await client.sendMessage(chatId, poll);
+    const pollIds = getMessageIdAliases(sentMessage);
+    if (registerChannelPollIds(pollIds, pollState, sentMessage)) {
+        removePendingChannelPoll(pollState);
+        return;
+    }
+}
+
+async function handleWhatsAppSwitchChannelCommand(client, message, command) {
+    const chatId = message.from;
+    const requestedBy = getMessageSenderId(message);
+    console.log(
+        `WhatsApp switch channel command from=${requestedBy || 'unknown'} chat=${chatId} arg=${command.channelName || '<poll>'}`,
+    );
+
+    if (command.channelName) {
+        try {
+            const channel = await switchToChannelByName(command.channelName);
+            await message.reply(`Switched TeamSpeak channel to: ${channel.name}`);
+        } catch (error) {
+            await message.reply(`Error: ${error.message}`);
+        }
+        return;
+    }
+
+    try {
+        await sendChannelSwitchPoll(client, chatId, requestedBy, 0);
+    } catch (error) {
+        await message.reply(`Error: ${error.message}`);
+    }
+}
+
+async function handleWhatsAppPollVote(client, vote) {
+    const pollIds = getVotePollIdAliases(vote);
+    const pollId = pollIds[0] || null;
+    const pollState = pollIds
+        .map((id) => state.channelPolls.get(id))
+        .find(Boolean);
+    console.log(
+        `WhatsApp poll vote received: pollIds=${pollIds.join(',') || 'unknown'} voter=${vote.voter || 'unknown'} selected=${(vote.selectedOptions || []).map((option) => `${option.localId ?? option.id}:${option.name || ''}`).join(',') || 'none'}`,
+    );
+    if (!pollState) {
+        console.log(
+            `Ignoring WhatsApp poll vote: no tracked TeamSpeak channel poll for ${pollId || 'unknown'}`,
+        );
+        return;
+    }
+
+    await processChannelPollSelection(client, pollState, vote.selectedOptions?.[0], {
+        source: 'vote_update',
+        voter: vote.voter,
+    });
+}
+
+async function handleWhatsAppPollVoteBulkUpsert(client, event) {
+    const parentKeys = Array.isArray(event?.parentKeys) ? event.parentKeys : [];
+    const chatIds = Array.isArray(event?.chatIds) ? event.chatIds : [];
+    const selectedIds =
+        event?.selectedOptionLocalIds?.length > 0
+            ? event.selectedOptionLocalIds
+            : event?.lastSuccessfulSelectedOptionLocalIds || [];
+    if (selectedIds.length === 0) {
+        console.log('Ignoring WhatsApp poll bulk-upsert: no selected option IDs.');
+        return;
+    }
+
+    let pollState = parentKeys
+        .map((key) => state.channelPolls.get(key))
+        .find(Boolean);
+    if (!pollState) {
+        const activeStates = getTrackedChannelPollStates().filter((state) => {
+            return (
+                !state.completed &&
+                Date.now() - state.createdAt < 30 * 60 * 1000 &&
+                chatIds.includes(state.chatId)
+            );
+        });
+        if (activeStates.length === 1) {
+            pollState = activeStates[0];
+        }
+    }
+    if (!pollState) {
+        console.log(
+            `Ignoring WhatsApp poll bulk-upsert: no tracked poll for parentKeys=${parentKeys.join(',') || 'none'} chatIds=${chatIds.join(',') || 'none'}`,
+        );
+        return;
+    }
+
+    const localId = Number(selectedIds[0]);
+    if (!Number.isInteger(localId)) {
+        console.log(
+            `Ignoring WhatsApp poll bulk-upsert: selected option is not numeric (${selectedIds[0]}).`,
+        );
+        return;
+    }
+
+    const voteKey = `${event.voter || 'unknown'}:${parentKeys.join(',')}:${selectedIds.join(',')}`;
+    if (!pollState.seenVoteKeys) pollState.seenVoteKeys = new Set();
+    if (pollState.seenVoteKeys.has(voteKey)) return;
+    pollState.seenVoteKeys.add(voteKey);
+
+    console.log(
+        `Processing WhatsApp poll bulk-upsert vote: voter=${event.voter || 'unknown'} selected=${selectedIds.join(',')} parentKeys=${parentKeys.join(',') || 'none'}`,
+    );
+    await processChannelPollSelection(
+        client,
+        pollState,
+        {
+            localId,
+            name: pollState.options[localId],
+        },
+        {
+            source: 'bulk_upsert',
+            voter: event.voter,
+        },
+    );
+}
+
+async function processChannelPollSelection(client, pollState, selected, context) {
+    const voter = context?.voter || null;
+    const source = context?.source || 'unknown';
+
+    if (pollState.requestedBy && voter && pollState.requestedBy !== voter) {
+        console.log(
+            `Accepting WhatsApp poll ${source} from voter ${voter}; requester was ${pollState.requestedBy}`,
+        );
+    }
+
+    if (!selected) {
+        console.log(`Ignoring WhatsApp poll ${source}: no selected option.`);
+        return;
+    }
+
+    const localId = selected.localId ?? selected.id;
+    const optionIndex = Number.isInteger(localId)
+        ? localId
+        : pollState.options.indexOf(selected.name);
+    if (!Number.isInteger(optionIndex) || optionIndex < 0) {
+        console.log(`Ignoring WhatsApp poll ${source}: selected option cannot be resolved.`);
+        return;
+    }
+
+    pollState.completed = true;
+    if (pollState.hasMore && optionIndex === pollState.channels.length) {
+        deleteChannelPollState(pollState);
+        await sendChannelSwitchPoll(
+            client,
+            pollState.chatId,
+            pollState.requestedBy,
+            pollState.page + 1,
+        );
+        return;
+    }
+
+    const channel = pollState.channels[optionIndex];
+    if (!channel) {
+        console.log(`Ignoring WhatsApp poll ${source}: no channel at option index ${optionIndex}.`);
+        pollState.completed = false;
+        return;
+    }
+
+    deleteChannelPollState(pollState);
+    const query = requireClientQuery();
+    console.log(`Switching TeamSpeak channel by WhatsApp poll ${source} to ${channel.name} (${channel.id}).`);
+    try {
+        await query.moveSelfToChannel(channel);
+    } catch (error) {
+        pollState.completed = false;
+        console.error(
+            `Could not switch TeamSpeak channel to ${channel.name} (${channel.id}): ${error.message}`,
+        );
+        await client.sendMessage(
+            pollState.chatId,
+            `Error switching TeamSpeak channel: ${error.message}`,
+        );
+        return;
+    }
+    await client.sendMessage(
+        pollState.chatId,
+        `Switched TeamSpeak channel to: ${channel.name}`,
+    );
+}
+
+function pruneChannelPolls() {
+    const expiresBefore = Date.now() - 30 * 60 * 1000;
+    for (const [pollId, pollState] of state.channelPolls.entries()) {
+        if (pollState.createdAt < expiresBefore) {
+            state.channelPolls.delete(pollId);
+        }
+    }
+    state.pendingChannelPolls = state.pendingChannelPolls.filter(
+        (pollState) => pollState.createdAt >= expiresBefore,
     );
 }
 
@@ -898,6 +1634,7 @@ async function main() {
         try {
             const query = new ClientQuery();
             await query.connect();
+            state.clientQuery = query;
 
             query.onTextMessage = async (event) => {
                 if (query.ownClientId && event.invokerid === query.ownClientId) return;
@@ -933,8 +1670,10 @@ async function main() {
                 }
             }
             console.error('ClientQuery command listener disconnected; reconnecting.');
+            if (state.clientQuery === query) state.clientQuery = null;
         } catch (error) {
             console.error(`ClientQuery command listener not ready: ${error.message}`);
+            state.clientQuery = null;
         }
         await sleep(5000);
     }

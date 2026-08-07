@@ -88,6 +88,7 @@ Läuft Docker auf einem entfernten Server, die Ports nicht offen ins Internet st
 
 ```bash
 ssh -L 6080:127.0.0.1:6080 \
+    -L 9222:127.0.0.1:9222 \
     -L 25640:127.0.0.1:25640 \
     user@docker-host
 ```
@@ -135,8 +136,9 @@ wwebjs-Fenster.
 
 Der Bot ist der einzige Besitzer der sichtbaren Chromium-Instanz. Dadurch gibt
 es kein zweites WhatsApp-Web-Fenster und keine konkurrierende Browsersteuerung.
-Der interne Chromium-Debug-Port `9222` bleibt nur für Bot-/Diagnosezwecke im
-Container aktiv und wird nicht per Compose veröffentlicht.
+Der Chromium-Debug-Port ist per Compose nur lokal auf dem Docker-Host gebunden
+(`127.0.0.1:${CHROMIUM_DEBUG_PORT:-9222}`) und dient ausschließlich der
+Diagnose der vom Bot gestarteten WhatsApp-Web-Instanz.
 
 Voraussetzung ist ein gesetzter `TS3_CLIENTQUERY_API_KEY`. Ohne Key bleibt der
 TeamSpeak-Kommandokanal deaktiviert; WhatsApp Web startet trotzdem sichtbar,
@@ -149,6 +151,7 @@ BRIDGE_COMMAND_PREFIX=!wa
 BRIDGE_COMMANDER_UIDS=abcDEFghiJklMNOpqrSTUvwxYz=,zweiteUid=
 BRIDGE_CONTACT_GROUPS={"support":["+491701234567","+491761234567"]}
 BRIDGE_WHATSAPP_INVITE_COMMAND=!invite
+BRIDGE_WHATSAPP_CHANNEL_POLL_MAX_OPTIONS=12
 BRIDGE_AUTO_ACCEPT_POLL_MS=5000
 BRIDGE_API_PORT=8080
 ```
@@ -221,12 +224,29 @@ WhatsApp-Nachricht an den Bridge-Account:
 
 ```text
 !invite
+!switchChannel
+!switchChannel Support
 ```
 
 Wenn ein WhatsApp-Anruf aktiv ist, lädt der Bot den Absender dieser Nachricht in
 den laufenden Anruf ein. Ist kein Anruf aktiv, passiert nichts. In
 WhatsApp-Gruppenchats wird der tatsächliche Nachrichtensender eingeladen, nicht
 die Gruppe.
+
+`!switchChannel` erstellt eine WhatsApp-Umfrage mit den TeamSpeak-Kanälen außer
+dem aktuell aktiven Kanal des Bridge-Clients. Ist die Auswahl durch
+`BRIDGE_WHATSAPP_CHANNEL_POLL_MAX_OPTIONS` begrenzt, enthält die Umfrage als
+letzte Option `show more channels`; diese Auswahl erstellt die nächste
+Kanalseite. `!switchChannel <kanalname>` wechselt direkt in den exakt benannten
+TeamSpeak-Kanal. Die versehentliche Schreibweise `!switchCahnnel` wird ebenfalls
+akzeptiert.
+
+Poll-Antworten werden im Bot zusätzlich über einen lokalen WhatsApp-Web-Hook auf
+`WAWebAddonPollVoteTableMode.pollVoteTableMode.bulkUpsert` verarbeitet. Das ist
+ein Kompatibilitäts-Shim für aktuelle WhatsApp-Web-Runtimes, in denen das
+`vote_update`-Event des gepinnten `whatsapp-web.js`-Forks nicht zuverlässig die
+serialisierte Parent-Message-ID liefert. Der Fork selbst wird dafür nicht
+erweitert; der Hook läuft nur in der vom Bot gestarteten Browser-Session.
 
 ## Diagnose
 
