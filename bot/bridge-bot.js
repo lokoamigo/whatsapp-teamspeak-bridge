@@ -1493,10 +1493,15 @@ async function acceptActiveWhatsAppCall(waClient, call = null, options = {}) {
 
     for (let attempt = 1; attempt <= attempts; attempt += 1) {
         try {
-            const acceptedCall =
+            const activeCall =
                 call && typeof call.accept === 'function'
-                    ? await call.accept()
-                    : await waClient.acceptCall();
+                    ? call
+                    : await getActiveWhatsAppCall(waClient);
+            if (!activeCall || typeof activeCall.accept !== 'function') {
+                throw new Error('No active WhatsApp call with accept support is available.');
+            }
+
+            const acceptedCall = await activeCall.accept();
             state.activeCall = acceptedCall || state.activeCall;
             state.activeCallId = acceptedCall?.id || state.activeCallId;
             return acceptedCall;
@@ -1587,7 +1592,7 @@ async function handleCommand(waClient, args) {
 
         const call =
             contactIds.length === 1
-                ? await waClient.startCall(contactIds[0], { video: false })
+                ? await waClient.call(contactIds[0], { video: false })
                 : await waClient.startGroupCall(contactIds, { video: false });
         state.activeCall = call;
         state.activeCallId = call.id;
@@ -1612,7 +1617,15 @@ async function handleCommand(waClient, args) {
     }
 
     if (command === 'hangup' || command === 'end') {
-        await waClient.endCall(state.activeCallId || undefined);
+        const activeCall =
+            state.activeCall && typeof state.activeCall.end === 'function'
+                ? state.activeCall
+                : await getActiveWhatsAppCall(waClient);
+        if (!activeCall || typeof activeCall.end !== 'function') {
+            throw new Error('No active WhatsApp call with end support is available.');
+        }
+
+        await activeCall.end();
         state.activeCall = null;
         state.activeCallId = null;
         return 'Ended the current WhatsApp call.';
