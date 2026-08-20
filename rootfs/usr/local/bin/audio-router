@@ -39,8 +39,10 @@ ensure_audio_graph() {
       source_properties=device.description=WhatsApp_to_TeamSpeak_Microphone >/dev/null
   fi
 
+  # WhatsApp tends to re-open the PulseAudio default devices for each call.
+  # Its playback must feed TeamSpeak, and its microphone must receive TeamSpeak.
   pactl set-default-sink wa_out || true
-  pactl set-default-source wa_mic || true
+  pactl set-default-source ts_mic || true
   touch /tmp/audio-ready
 }
 
