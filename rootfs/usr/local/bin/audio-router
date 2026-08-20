@@ -40,7 +40,7 @@ ensure_audio_graph() {
   fi
 
   pactl set-default-sink wa_out || true
-  pactl set-default-source wa_mic || true
+  pactl set-default-source ts_mic || true
   touch /tmp/audio-ready
 }
 
