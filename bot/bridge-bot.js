@@ -18,6 +18,13 @@ const WHATSAPP_INVITE_COMMAND =
 const WHATSAPP_PULSE_SOURCE = process.env.BRIDGE_WHATSAPP_PULSE_SOURCE || 'ts_mic';
 const WHATSAPP_PULSE_SOURCE_NUDGE =
     process.env.BRIDGE_WHATSAPP_PULSE_SOURCE_NUDGE || 'wa_mic';
+const WHATSAPP_MIC_DEVICE_MATCHES = (
+    process.env.BRIDGE_WHATSAPP_MIC_DEVICE_MATCH ||
+    'ts_mic,ts-wweb-mic,ts_wweb_mic,TeamSpeak_to_WhatsApp_Microphone,Teamspeak_to_whatsapp-Microphone,Teamspeak_to_whatsapp_Microphone'
+)
+    .split(',')
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
 const API_HOST = process.env.BRIDGE_API_HOST || '0.0.0.0';
 const API_PORT = Math.max(
     1,
@@ -103,6 +110,149 @@ async function refreshWhatsAppMicrophone(reason) {
     } catch (error) {
         console.log(
             `Could not refresh WhatsApp microphone after ${reason}: ${error.message}`,
+        );
+    }
+}
+
+function whatsappMicrophoneShim(deviceMatches) {
+    if (window.__bridgeWhatsAppMicShim?.installed) return;
+
+    const mediaDevices = navigator.mediaDevices;
+    const originalGetUserMedia = mediaDevices?.getUserMedia?.bind(mediaDevices);
+    if (!mediaDevices || !originalGetUserMedia) {
+        window.__bridgeWhatsAppMicShim = {
+            installed: false,
+            reason: 'navigator.mediaDevices.getUserMedia is not available',
+        };
+        return;
+    }
+
+    const matches = Array.from(new Set(deviceMatches || []))
+        .map((value) => String(value || '').trim().toLowerCase())
+        .filter(Boolean);
+
+    function isBridgeMicrophone(device) {
+        const haystack = [device.label, device.deviceId, device.groupId]
+            .filter(Boolean)
+            .join(' ')
+            .toLowerCase();
+        return matches.some((match) => haystack.includes(match));
+    }
+
+    async function getBridgeMicrophone() {
+        if (typeof mediaDevices.enumerateDevices !== 'function') return null;
+        const devices = await mediaDevices.enumerateDevices();
+        return devices.find((device) => {
+            return device.kind === 'audioinput' && isBridgeMicrophone(device);
+        });
+    }
+
+    async function withBridgeMicrophone(constraints) {
+        if (!constraints?.audio) return constraints;
+
+        const device = await getBridgeMicrophone();
+        if (!device?.deviceId) return constraints;
+
+        const nextConstraints = { ...constraints };
+        if (constraints.audio === true) {
+            nextConstraints.audio = { deviceId: { exact: device.deviceId } };
+        } else {
+            nextConstraints.audio = {
+                ...constraints.audio,
+                deviceId: { exact: device.deviceId },
+            };
+        }
+
+        window.__bridgeWhatsAppMicShim.lastDevice = {
+            deviceId: device.deviceId,
+            label: device.label || '',
+        };
+        return nextConstraints;
+    }
+
+    window.__bridgeWhatsAppMicShim = {
+        installed: true,
+        matches,
+        lastDevice: null,
+        getUserMediaCalls: 0,
+    };
+
+    const patchedGetUserMedia = async (constraints) => {
+        window.__bridgeWhatsAppMicShim.getUserMediaCalls += 1;
+        return originalGetUserMedia(await withBridgeMicrophone(constraints || {}));
+    };
+
+    try {
+        mediaDevices.getUserMedia = patchedGetUserMedia;
+    } catch (error) {
+        Object.defineProperty(mediaDevices, 'getUserMedia', {
+            configurable: true,
+            value: patchedGetUserMedia,
+        });
+    }
+
+    const originalLegacyGetUserMedia =
+        navigator.getUserMedia ||
+        navigator.webkitGetUserMedia ||
+        navigator.mozGetUserMedia;
+    if (typeof originalLegacyGetUserMedia === 'function') {
+        const patchedLegacyGetUserMedia = (constraints, onSuccess, onError) => {
+            withBridgeMicrophone(constraints || {})
+                .then((nextConstraints) => {
+                    originalLegacyGetUserMedia.call(
+                        navigator,
+                        nextConstraints,
+                        onSuccess,
+                        onError,
+                    );
+                })
+                .catch(onError);
+        };
+        try {
+            navigator.getUserMedia = patchedLegacyGetUserMedia;
+            navigator.webkitGetUserMedia = patchedLegacyGetUserMedia;
+            navigator.mozGetUserMedia = patchedLegacyGetUserMedia;
+        } catch (error) {
+            Object.defineProperty(navigator, 'getUserMedia', {
+                configurable: true,
+                value: patchedLegacyGetUserMedia,
+            });
+        }
+    }
+}
+
+async function installWhatsAppMicrophoneShim(client, reason) {
+    if (!client.pupPage || client.pupPage.isClosed()) return;
+
+    try {
+        const browserContext = client.pupPage.browserContext?.();
+        if (typeof browserContext?.overridePermissions === 'function') {
+            await browserContext.overridePermissions('https://web.whatsapp.com', [
+                'microphone',
+                'notifications',
+            ]);
+        }
+    } catch (error) {
+        console.log(
+            `Could not pre-grant WhatsApp microphone permission after ${reason}: ${error.message}`,
+        );
+    }
+
+    try {
+        await client.pupPage.evaluateOnNewDocument(
+            whatsappMicrophoneShim,
+            WHATSAPP_MIC_DEVICE_MATCHES,
+        );
+        await client.pupPage.evaluate(
+            whatsappMicrophoneShim,
+            WHATSAPP_MIC_DEVICE_MATCHES,
+        );
+        console.log(
+            `Installed WhatsApp microphone selector shim after ${reason}: ${WHATSAPP_MIC_DEVICE_MATCHES.join('|')}`,
+        );
+    } catch (error) {
+        console.log(
+            `Could not install WhatsApp microphone selector shim after ${reason}: ${error.message}`,
         );
     }
 }
@@ -782,6 +932,11 @@ async function createWhatsAppClient() {
         attachWhatsAppPollVoteBridge(client).catch((error) => {
             console.error(`Could not attach WhatsApp poll vote bridge: ${error.message}`);
         });
+        installWhatsAppMicrophoneShim(client, 'ready').catch((error) => {
+            console.error(
+                `Could not install WhatsApp microphone selector shim: ${error.message}`,
+            );
+        });
     });
 
     client.on('authenticated', () => {
@@ -830,6 +985,7 @@ async function createWhatsAppClient() {
     });
 
     await client.initialize();
+    await installWhatsAppMicrophoneShim(client, 'initialize');
     await refreshWhatsAppReady(client);
     const readyPoller = setInterval(() => {
         if (state.ready) {
@@ -1447,11 +1603,13 @@ async function inspectWhatsAppRuntime(client) {
             acceptCall: false,
             endCall: false,
             addParticipantToCall: false,
+            micShim: null,
             info: null,
             reason: null,
         };
 
         try {
+            result.micShim = window.__bridgeWhatsAppMicShim || null;
             const Socket = window.require('WAWebSocketModel').Socket;
             result.state = Socket.state || null;
             result.hasSynced = Socket.hasSynced === true;
@@ -1533,6 +1691,7 @@ async function acceptActiveWhatsAppCall(waClient, call = null, options = {}) {
                 throw new Error('No active WhatsApp call with accept support is available.');
             }
 
+            await installWhatsAppMicrophoneShim(waClient, 'call accept');
             const acceptedCall = await activeCall.accept();
             state.activeCall = acceptedCall || state.activeCall;
             state.activeCallId = acceptedCall?.id || state.activeCallId;
@@ -1559,6 +1718,9 @@ function whatsappStatusText() {
         `acceptApi=${runtime.acceptCall === true}`,
         `endApi=${runtime.endCall === true}`,
         `callApi=${runtime.addParticipantToCall === true}`,
+        runtime.micShim
+            ? `micShim=${runtime.micShim.installed === true}:${runtime.micShim.getUserMediaCalls || 0}`
+            : null,
         runtime.reason ? `reason=${runtime.reason}` : null,
     ]
         .filter(Boolean)
@@ -1623,6 +1785,7 @@ async function handleCommand(waClient, args) {
             return `Active WhatsApp call detected; invited ${contactIds.length} participant(s) instead: ${activeCallId}`;
         }
 
+        await installWhatsAppMicrophoneShim(waClient, 'call start');
         const call =
             contactIds.length === 1
                 ? await waClient.call(contactIds[0], { video: false })
@@ -1644,6 +1807,7 @@ async function handleCommand(waClient, args) {
         if (contactIds.length < 2) {
             throw new Error('A WhatsApp group call needs at least two individual participants.');
         }
+        await installWhatsAppMicrophoneShim(waClient, 'group call start');
         const call = await waClient.startGroupCall(contactIds, { video: false });
         state.activeCall = call;
         state.activeCallId = call.id;

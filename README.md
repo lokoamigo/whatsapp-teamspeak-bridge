@@ -311,12 +311,16 @@ Die Startskripte setzen diese Zuordnung per `PULSE_SINK` und `PULSE_SOURCE`; die
 
 Wenn WhatsApp Web im laufenden Call erst nach einem manuellen Wechsel zwischen
 „Default“ und `TeamSpeak_to_WhatsApp_Microphone` Ton vom TeamSpeak-Eingang
-annimmt, aktualisiert die Bridge die Chromium-Mikrofonauswahl automatisch:
-Der Bot triggert nach Call-Start oder Annahme kurz einen PulseAudio-Default-
-Source-Wechsel, und `audio-router` wiederholt diesen Refresh beim Erkennen
-neuer Chromium-Aufnahmeströme. Die Zielquelle ist standardmäßig `ts_mic`;
-optional kann sie mit `BRIDGE_WHATSAPP_PULSE_SOURCE` angepasst werden. Die
-kurze Ausweichquelle ist standardmäßig `wa_mic` und kann mit
+annimmt, setzt die Bridge die Chromium-/WebRTC-Mikrofonauswahl zusätzlich in
+WhatsApp Web selbst: Der Bot installiert im WhatsApp-Tab einen `getUserMedia`-
+Shim, der Audio-Constraints auf das Bridge-Mikrofon umbiegt. Der Matcher sucht
+standardmäßig nach `ts_mic`, `ts-wweb-mic`, `ts_wweb_mic` und
+`TeamSpeak_to_WhatsApp_Microphone`; bei abweichenden Chromium-Gerätenamen kann
+er mit `BRIDGE_WHATSAPP_MIC_DEVICE_MATCH` als kommagetrennte Liste angepasst
+werden. Zusätzlich triggert die Bridge nach Call-Start oder Annahme kurz einen
+PulseAudio-Default-Source-Wechsel. Die Zielquelle ist standardmäßig `ts_mic`;
+optional kann sie mit `BRIDGE_WHATSAPP_PULSE_SOURCE` angepasst werden. Die kurze
+Ausweichquelle ist standardmäßig `wa_mic` und kann mit
 `BRIDGE_WHATSAPP_PULSE_SOURCE_NUDGE` gesetzt werden.
 
 ## Wichtige Grenzen
