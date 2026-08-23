@@ -311,16 +311,28 @@ Die Startskripte setzen diese Zuordnung per `PULSE_SINK` und `PULSE_SOURCE`; die
 
 Wenn WhatsApp Web im laufenden Call erst nach einem manuellen Wechsel zwischen
 „Default“ und `TeamSpeak_to_WhatsApp_Microphone` Ton vom TeamSpeak-Eingang
-annimmt, setzt die Bridge die Chromium-/WebRTC-Mikrofonauswahl zusätzlich in
-WhatsApp Web selbst: Der Bot installiert im WhatsApp-Tab einen `getUserMedia`-
-Shim, der Audio-Constraints auf das Bridge-Mikrofon umbiegt. Der Matcher sucht
-standardmäßig nach `ts_mic`, `ts-wweb-mic`, `ts_wweb_mic` und
-`TeamSpeak_to_WhatsApp_Microphone`; bei abweichenden Chromium-Gerätenamen kann
-er mit `BRIDGE_WHATSAPP_MIC_DEVICE_MATCH` als kommagetrennte Liste angepasst
-werden. Zusätzlich triggert die Bridge nach Call-Start oder Annahme kurz einen
-PulseAudio-Default-Source-Wechsel. Die Zielquelle ist standardmäßig `ts_mic`;
-optional kann sie mit `BRIDGE_WHATSAPP_PULSE_SOURCE` angepasst werden. Die kurze
-Ausweichquelle ist standardmäßig `wa_mic` und kann mit
+annimmt, bedient die Bridge nach Call-Start oder Annahme wiederholt die
+WhatsApp-Call-Oberfläche selbst: Sie öffnet die Mikrofon-/Lautsprecher-
+Einstellungen, wählt kurz `Default` und danach
+`TeamSpeak_to_WhatsApp_Microphone`. Diese Stabilisierung läuft standardmäßig
+nach `3000`, `10000` und `20000` ms
+(`BRIDGE_WHATSAPP_CALL_MIC_STABILIZE_DELAYS_MS`), damit WhatsApp Web auch nach
+dem eigentlichen Verbindungsaufbau noch einmal angestoßen wird. Die Menüeinträge
+können mit `BRIDGE_WHATSAPP_CALL_MIC_MENU_NUDGE` und
+`BRIDGE_WHATSAPP_CALL_MIC_MENU_TARGET` angepasst werden. Zwischen beiden Klicks
+wartet sie standardmäßig `2000` ms
+(`BRIDGE_WHATSAPP_CALL_MIC_MENU_DELAY_MS`), nach dem Zielklick `3000` ms
+(`BRIDGE_WHATSAPP_CALL_MIC_MENU_VERIFY_DELAY_MS`). Vor einem direkten
+Einzelversuch wartet sie standardmäßig `3000` ms
+(`BRIDGE_WHATSAPP_CALL_MIC_MENU_INITIAL_DELAY_MS`), nach dem Öffnen des Menüs
+`500` ms (`BRIDGE_WHATSAPP_CALL_MIC_MENU_OPEN_DELAY_MS`). Innerhalb eines
+Stabilisierungszeitpunkts wiederholt sie die Sequenz bis zu `3` Mal
+(`BRIDGE_WHATSAPP_CALL_MIC_MENU_RETRIES`) mit `3000` ms Pause
+(`BRIDGE_WHATSAPP_CALL_MIC_MENU_RETRY_DELAY_MS`), solange Chromium noch keinen
+`RecordStream` für das Mikrofon geöffnet hat. Außerdem triggert die Bridge kurz
+einen PulseAudio-Default-Source-Wechsel. Die Zielquelle ist standardmäßig
+`ts_mic`; optional kann sie mit `BRIDGE_WHATSAPP_PULSE_SOURCE` angepasst werden.
+Die kurze Ausweichquelle ist standardmäßig `wa_mic` und kann mit
 `BRIDGE_WHATSAPP_PULSE_SOURCE_NUDGE` gesetzt werden.
 
 ## Wichtige Grenzen
