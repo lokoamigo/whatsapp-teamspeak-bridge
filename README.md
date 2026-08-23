@@ -309,6 +309,16 @@ Im noVNC-Desktop `pavucontrol` öffnen und prüfen:
 
 Die Startskripte setzen diese Zuordnung per `PULSE_SINK` und `PULSE_SOURCE`; die sichtbaren Mikrofone sind normale PulseAudio-Remap-Sources, damit Chromium und TeamSpeak sie als Eingabegeräte erkennen. Manche GUI-Profile speichern jedoch eine zuvor manuell gewählte Hardwarequelle und müssen einmal auf „Default“ zurückgestellt werden.
 
+Wenn WhatsApp Web im laufenden Call erst nach einem manuellen Wechsel zwischen
+„Default“ und `TeamSpeak_to_WhatsApp_Microphone` Ton vom TeamSpeak-Eingang
+annimmt, aktualisiert die Bridge die Chromium-Mikrofonauswahl automatisch:
+Der Bot triggert nach Call-Start oder Annahme kurz einen PulseAudio-Default-
+Source-Wechsel, und `audio-router` wiederholt diesen Refresh beim Erkennen
+neuer Chromium-Aufnahmeströme. Die Zielquelle ist standardmäßig `ts_mic`;
+optional kann sie mit `BRIDGE_WHATSAPP_PULSE_SOURCE` angepasst werden. Die
+kurze Ausweichquelle ist standardmäßig `wa_mic` und kann mit
+`BRIDGE_WHATSAPP_PULSE_SOURCE_NUDGE` gesetzt werden.
+
 ## Wichtige Grenzen
 
 - Das ist eine bidirektionale Telefon-/VoIP-Brücke. Teilnehmer können ihr eigenes Signal zeitversetzt zurückbekommen; Echo und Rückkopplung sind möglich. Headsets, Push-to-Talk oder eine moderierte Halbduplex-Nutzung helfen.

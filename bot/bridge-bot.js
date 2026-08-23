@@ -2,6 +2,7 @@
 
 const http = require('http');
 const net = require('net');
+const { execFile } = require('child_process');
 const { Client, ClientInfo, NoAuth, Poll } = require('whatsapp-web.js');
 
 const TS_HOST = process.env.TS3_CLIENTQUERY_HOST || '127.0.0.1';
@@ -14,6 +15,9 @@ const CHROMIUM_PROFILE = process.env.WWEBJS_CHROMIUM_PROFILE || '/data/chromium'
 const COMMAND_PREFIX = process.env.BRIDGE_COMMAND_PREFIX || '!wa';
 const WHATSAPP_INVITE_COMMAND =
     process.env.BRIDGE_WHATSAPP_INVITE_COMMAND || '!invite';
+const WHATSAPP_PULSE_SOURCE = process.env.BRIDGE_WHATSAPP_PULSE_SOURCE || 'ts_mic';
+const WHATSAPP_PULSE_SOURCE_NUDGE =
+    process.env.BRIDGE_WHATSAPP_PULSE_SOURCE_NUDGE || 'wa_mic';
 const API_HOST = process.env.BRIDGE_API_HOST || '0.0.0.0';
 const API_PORT = Math.max(
     1,
@@ -73,6 +77,34 @@ const state = {
 
 function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function runPactl(args) {
+    return new Promise((resolve, reject) => {
+        execFile('pactl', args, { timeout: 5000 }, (error, stdout, stderr) => {
+            if (error) {
+                error.stderr = stderr;
+                reject(error);
+                return;
+            }
+            resolve(stdout);
+        });
+    });
+}
+
+async function refreshWhatsAppMicrophone(reason) {
+    try {
+        await runPactl(['set-default-source', WHATSAPP_PULSE_SOURCE_NUDGE]);
+        await sleep(200);
+        await runPactl(['set-default-source', WHATSAPP_PULSE_SOURCE]);
+        console.log(
+            `Refreshed WhatsApp microphone default after ${reason}: ${WHATSAPP_PULSE_SOURCE}`,
+        );
+    } catch (error) {
+        console.log(
+            `Could not refresh WhatsApp microphone after ${reason}: ${error.message}`,
+        );
+    }
 }
 
 function tsEscape(value) {
@@ -1504,6 +1536,7 @@ async function acceptActiveWhatsAppCall(waClient, call = null, options = {}) {
             const acceptedCall = await activeCall.accept();
             state.activeCall = acceptedCall || state.activeCall;
             state.activeCallId = acceptedCall?.id || state.activeCallId;
+            await refreshWhatsAppMicrophone('call accept');
             return acceptedCall;
         } catch (error) {
             lastError = error;
@@ -1596,6 +1629,7 @@ async function handleCommand(waClient, args) {
                 : await waClient.startGroupCall(contactIds, { video: false });
         state.activeCall = call;
         state.activeCallId = call.id;
+        await refreshWhatsAppMicrophone('call start');
         return `Started WhatsApp voice call with ${contactIds.length} participant(s): ${call.id}`;
     }
 
@@ -1613,6 +1647,7 @@ async function handleCommand(waClient, args) {
         const call = await waClient.startGroupCall(contactIds, { video: false });
         state.activeCall = call;
         state.activeCallId = call.id;
+        await refreshWhatsAppMicrophone('group call start');
         return `Started WhatsApp group voice call with ${contactIds.length} participant(s): ${call.id}`;
     }
 

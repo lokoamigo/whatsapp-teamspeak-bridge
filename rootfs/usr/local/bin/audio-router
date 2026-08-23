@@ -2,6 +2,9 @@
 set -euo pipefail
 
 socket="${XDG_RUNTIME_DIR:-/tmp/runtime-bridge}/pulse/native"
+seen_chromium_sources="/tmp/audio-router-chromium-sources.seen"
+whatsapp_source="${BRIDGE_WHATSAPP_PULSE_SOURCE:-ts_mic}"
+whatsapp_source_nudge="${BRIDGE_WHATSAPP_PULSE_SOURCE_NUDGE:-wa_mic}"
 
 ensure_audio_graph() {
   [[ -S "$socket" ]] || return 1
@@ -56,17 +59,26 @@ route_streams() {
     pactl move-sink-input "$input" "$target" >/dev/null 2>&1 || true
   done
 
-  pactl list source-outputs | awk '
+  pactl list source-outputs | awk -v whatsapp_source="$whatsapp_source" '
     /^Source Output #/ { id = substr($3, 2) }
-    /application.process.binary = "chromium"/ { print id " ts_mic" }
+    /application.process.binary = "chromium"/ { print id " " whatsapp_source }
     /application.process.binary = "ts3client_linux_amd64"/ { print id " wa_mic" }
   ' | while read -r output target; do
     [[ -n "${output:-}" && -n "${target:-}" ]] || continue
+    if [[ "$target" = "$whatsapp_source" ]] && ! grep -qx "$output" "$seen_chromium_sources" 2>/dev/null; then
+      printf '%s\n' "$output" >>"$seen_chromium_sources"
+      # WhatsApp Web sometimes keeps a stale in-call "Default" microphone until
+      # Chromium receives a device/default-source change after WebRTC opens.
+      pactl set-default-source "$whatsapp_source_nudge" >/dev/null 2>&1 || true
+      sleep 0.2
+      pactl set-default-source "$whatsapp_source" >/dev/null 2>&1 || true
+    fi
     pactl move-source-output "$output" "$target" >/dev/null 2>&1 || true
   done
 }
 
 rm -f /tmp/audio-ready
+rm -f "$seen_chromium_sources"
 while true; do
   if ensure_audio_graph; then
     route_streams || true
