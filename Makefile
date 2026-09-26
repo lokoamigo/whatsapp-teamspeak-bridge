@@ -1,4 +1,4 @@
-.PHONY: build restart up status logs
+.PHONY: build restart up status logs version version-check version-bump
 
 COMPOSE ?= docker compose
 
@@ -17,3 +17,13 @@ status:
 
 logs:
 	$(COMPOSE) logs -f bridge
+
+version:
+	@node scripts/version.js show
+
+version-check:
+	@node scripts/version.js check
+
+version-bump:
+	@test -n "$(BUMP)" || (echo "Usage: make version-bump BUMP=<major|minor|patch|x.y.z>" >&2; exit 2)
+	@node scripts/version.js bump "$(BUMP)"

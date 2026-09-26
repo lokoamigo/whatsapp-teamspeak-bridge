@@ -220,6 +220,12 @@ Erreichbarkeitsprüfungen steht außerdem `GET /api/v1/health` bereit.
 Die versionierte Route-Registry im Bot ist der vorgesehene Erweiterungspunkt
 für weitere API-Funktionen.
 
+Die Health-Route nennt zusätzlich die laufende Projektversion:
+
+```json
+{"ready":true,"version":"0.1.0"}
+```
+
 WhatsApp-Nachricht an den Bridge-Account:
 
 ```text
@@ -247,6 +253,33 @@ ein Kompatibilitäts-Shim für aktuelle WhatsApp-Web-Runtimes, in denen das
 `vote_update`-Event des gepinnten `whatsapp-web.js`-Forks nicht zuverlässig die
 serialisierte Parent-Message-ID liefert. Der Fork selbst wird dafür nicht
 erweitert; der Hook läuft nur in der vom Bot gestarteten Browser-Session.
+
+## Versionierung
+
+Das Projekt verwendet [Semantic Versioning](https://semver.org/). Die
+maßgebliche Version steht in `package.json`; `package-lock.json` wird durch das
+Versionierungswerkzeug synchron gehalten.
+
+Aktuelle Version anzeigen oder die Metadaten prüfen:
+
+```bash
+make version
+make version-check
+```
+
+Eine Version erhöhen:
+
+```bash
+make version-bump BUMP=patch
+make version-bump BUMP=minor
+make version-bump BUMP=major
+# oder eine konkrete SemVer-Version setzen:
+make version-bump BUMP=1.0.0-rc.1
+```
+
+Vor einem Release den passenden Abschnitt in `CHANGELOG.md` ergänzen, die
+Versionsänderung committen und den Commit mit `v<version>` markieren, zum
+Beispiel `v0.2.0`. Das Werkzeug erstellt bewusst weder Commit noch Tag.
 
 ## Diagnose
 
