@@ -6,7 +6,10 @@
   "type": "commonjs",
   "main": "bot/bridge-bot.js",
   "scripts": {
-    "start": "node bot/bridge-bot.js"
+    "start": "node bot/bridge-bot.js",
+    "version:show": "node scripts/version.js show",
+    "version:check": "node scripts/version.js check",
+    "version:bump": "node scripts/version.js bump"
   },
   "dependencies": {
     "whatsapp-web.js": "https://github.com/lokoamigo/whatsapp-web.js-new-calling-feature/archive/f2449e126f9e4b2527f4119d95c0021e085ce2ca.tar.gz"

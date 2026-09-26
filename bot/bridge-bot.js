@@ -1,6 +1,7 @@
 'use strict';
 
 const http = require('http');
+const { version: BRIDGE_VERSION } = require('../package.json');
 const net = require('net');
 const { execFile } = require('child_process');
 const { Client, ClientInfo, NoAuth, Poll } = require('whatsapp-web.js');
@@ -760,7 +761,7 @@ function createApiServer(waClient) {
             'GET /api/v1/health',
             async () => ({
                 statusCode: 200,
-                body: { ready: state.ready },
+                body: { ready: state.ready, version: BRIDGE_VERSION },
             }),
         ],
         [
