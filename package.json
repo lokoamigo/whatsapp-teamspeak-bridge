@@ -9,6 +9,7 @@
     "start": "node bot/bridge-bot.js",
     "version:show": "node scripts/version.js show",
     "version:check": "node scripts/version.js check",
+    "version:check-tag": "node scripts/version.js check-tag",
     "version:bump": "node scripts/version.js bump"
   },
   "dependencies": {

@@ -279,7 +279,16 @@ make version-bump BUMP=1.0.0-rc.1
 
 Vor einem Release den passenden Abschnitt in `CHANGELOG.md` ergänzen, die
 Versionsänderung committen und den Commit mit `v<version>` markieren, zum
-Beispiel `v0.2.0`. Das Werkzeug erstellt bewusst weder Commit noch Tag.
+Beispiel `v0.2.0`. Optional kann die Übereinstimmung vorab geprüft werden:
+
+```bash
+make version-check-tag TAG=v0.2.0
+```
+
+Nach dem Push des Tags prüft GitHub Actions, ob Tag, `package.json` und
+`package-lock.json` übereinstimmen, und erstellt automatisch das zugehörige
+GitHub Release mit generierten Release Notes. Commits und Tags werden bewusst
+nicht automatisch erzeugt.
 
 ## Diagnose
 

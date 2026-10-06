@@ -71,6 +71,22 @@ function main() {
         return;
     }
 
+    if (command === 'check-tag') {
+        verify(packageJson, packageLock);
+        const tag = process.argv[3] || process.env.GITHUB_REF_NAME;
+        if (!tag) {
+            throw new Error('Usage: node scripts/version.js check-tag <vX.Y.Z>');
+        }
+
+        const expectedTag = `v${packageJson.version}`;
+        if (tag !== expectedTag) {
+            throw new Error(`Tag ${tag} does not match package version ${expectedTag}.`);
+        }
+
+        console.log(`Tag ${tag} matches project version ${packageJson.version}.`);
+        return;
+    }
+
     if (command === 'bump') {
         verify(packageJson, packageLock);
         const requested = process.argv[3];

@@ -1,4 +1,4 @@
-.PHONY: build restart up status logs version version-check version-bump
+.PHONY: build restart up status logs version version-check version-check-tag version-bump
 
 COMPOSE ?= docker compose
 
@@ -23,6 +23,10 @@ version:
 
 version-check:
 	@node scripts/version.js check
+
+version-check-tag:
+	@test -n "$(TAG)" || (echo "Usage: make version-check-tag TAG=vX.Y.Z" >&2; exit 2)
+	@node scripts/version.js check-tag "$(TAG)"
 
 version-bump:
 	@test -n "$(BUMP)" || (echo "Usage: make version-bump BUMP=<major|minor|patch|x.y.z>" >&2; exit 2)

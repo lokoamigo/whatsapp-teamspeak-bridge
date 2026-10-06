@@ -12,6 +12,7 @@ backward compatibility guarantees.
 
 - Project version validation and bump tooling.
 - Runtime version reporting through `GET /api/v1/health`.
+- GitHub Actions validation and automated GitHub Releases for version tags.
 
 ## [0.1.0]
 
