@@ -291,6 +291,9 @@ Nach dem Push des Tags prüft GitHub Actions, ob Tag, `package.json` und
 erstellt automatisch das zugehörige GitHub Release mit generierten Release
 Notes. Commits und Tags werden bewusst nicht automatisch erzeugt.
 
+Für den Release-Build muss nach Annahme der TeamSpeak-Lizenz die GitHub-Actions-
+Repository-Variable `TS3_LICENSE_ACCEPTED` auf `YES` gesetzt sein.
+
 ## Diagnose
 
 Die folgenden Meldungen aus älteren Builds wurden korrigiert:

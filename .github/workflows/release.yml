@@ -47,6 +47,8 @@ jobs:
           context: .
           platforms: linux/amd64
           push: true
+          build-args: |
+            TS3_LICENSE_ACCEPTED=${{ vars.TS3_LICENSE_ACCEPTED }}
           tags: |
             ${{ env.IMAGE_NAME }}:${{ env.IMAGE_VERSION }}
             ${{ env.IMAGE_NAME }}:latest
