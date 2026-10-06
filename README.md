@@ -286,13 +286,11 @@ make version-check-tag TAG=v0.2.0
 ```
 
 Nach dem Push des Tags prüft GitHub Actions, ob Tag, `package.json` und
-`package-lock.json` übereinstimmen, veröffentlicht das Container-Image als
-`ghcr.io/lokoamigo/whatsapp-teamspeak-bridge:<version>` sowie `:latest` und
-erstellt automatisch das zugehörige GitHub Release mit generierten Release
-Notes. Commits und Tags werden bewusst nicht automatisch erzeugt.
-
-Für den Release-Build muss nach Annahme der TeamSpeak-Lizenz die GitHub-Actions-
-Repository-Variable `TS3_LICENSE_ACCEPTED` auf `YES` gesetzt sein.
+`package-lock.json` übereinstimmen, und erstellt automatisch das zugehörige
+GitHub Release mit generierten Release Notes. Wegen der TeamSpeak-Lizenz werden
+keine vorgebauten Container-Images verteilt; Nutzer bauen das Image selbst und
+bestätigen die Lizenz dabei ausdrücklich. Commits und Tags werden bewusst nicht
+automatisch erzeugt.
 
 ## Diagnose
 

@@ -8,10 +8,6 @@ backward compatibility guarantees.
 
 ## [Unreleased]
 
-### Added
-
-- Release container images published through GitHub Container Registry.
-
 ## [0.1.0]
 
 ### Added
