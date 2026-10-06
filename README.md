@@ -286,9 +286,10 @@ make version-check-tag TAG=v0.2.0
 ```
 
 Nach dem Push des Tags prüft GitHub Actions, ob Tag, `package.json` und
-`package-lock.json` übereinstimmen, und erstellt automatisch das zugehörige
-GitHub Release mit generierten Release Notes. Commits und Tags werden bewusst
-nicht automatisch erzeugt.
+`package-lock.json` übereinstimmen, veröffentlicht das Container-Image als
+`ghcr.io/lokoamigo/whatsapp-teamspeak-bridge:<version>` sowie `:latest` und
+erstellt automatisch das zugehörige GitHub Release mit generierten Release
+Notes. Commits und Tags werden bewusst nicht automatisch erzeugt.
 
 ## Diagnose
 
