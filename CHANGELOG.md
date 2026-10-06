@@ -8,15 +8,14 @@ backward compatibility guarantees.
 
 ## [Unreleased]
 
+## [0.1.0]
+
 ### Added
 
 - Project version validation and bump tooling.
 - Runtime version reporting through `GET /api/v1/health`.
 - GitHub Actions validation and automated GitHub Releases for version tags.
-
-## [0.1.0]
-
-- Initial development version.
+- Initial development release.
 
 [Unreleased]: https://github.com/lokoamigo/whatsapp-teamspeak-bridge/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/lokoamigo/whatsapp-teamspeak-bridge/releases/tag/v0.1.0
