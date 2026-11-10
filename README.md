@@ -223,8 +223,11 @@ für weitere API-Funktionen.
 Die Health-Route nennt zusätzlich die laufende Projektversion:
 
 ```json
-{"ready":true,"version":"0.1.0"}
+{"ready":true,"awaitingQr":false,"version":"0.1.1"}
 ```
+
+`awaitingQr` ist `true`, solange WhatsApp nicht gekoppelt ist und Chromium
+einen QR-Code anzeigt (siehe „WhatsApp-Geräteverknüpfung abgemeldet“).
 
 WhatsApp-Nachricht an den Bridge-Account:
 
@@ -337,6 +340,37 @@ Grafischen Audiomixer öffnen:
 docker compose exec -d -u bridge bridge \
   env DISPLAY=:99 PULSE_SERVER=unix:/tmp/runtime-bridge/pulse/native pavucontrol
 ```
+
+### WhatsApp-Geräteverknüpfung abgemeldet
+
+Wurde das verknüpfte Gerät am Telefon entfernt oder hat WhatsApp die Sitzung
+beendet, meldet der Bot einmalig:
+
+```text
+WhatsApp Web.js disconnected: LOGOUT
+WhatsApp linked device was logged out. Re-link it: open noVNC (port 6080) and scan the QR code in Chromium with WhatsApp > Linked devices.
+```
+
+Der Bot und Chromium laufen weiter, WhatsApp Web zeigt im selben Fenster einen
+neuen QR-Code. Über noVNC (`http://127.0.0.1:6080/`) scannen; danach erscheint
+`WhatsApp Web.js bot is ready.`. `!wa status` und `GET /api/v1/health` zeigen
+bis dahin `awaitingQr=true`.
+
+Das Chromium-Profil unter `/data/chromium` wird dabei bewusst nicht gelöscht:
+WhatsApp Web räumt seine eigenen Sitzungsdaten beim Logout selbst auf, und das
+Profil enthält zusätzlich Einstellungen wie die Mikrofonfreigabe. Auch die
+WhatsApp-Origin-Daten (`Default/IndexedDB/https_web.whatsapp.com_*`,
+`Default/Local Storage`, `Default/Service Worker`) werden nicht automatisch
+entfernt, weil das Löschen bei laufendem Chromium dessen Datenbanken
+beschädigen kann und für den Logout nicht nötig ist.
+
+Builds bis `0.1.0` stürzten nach einem solchen Logout bei jedem Start mit
+`Execution context was destroyed` ab (Fehler im `framenavigated`-Handler von
+`whatsapp-web.js`), bis Supervisor `bridge-bot` als `FATAL` markierte. Seit
+`0.1.1` ist das behoben. Supervisor versucht den Bot außerdem bis zu 50-mal
+mit wachsendem Abstand neu zu starten, bevor er aufgibt. Steht `bridge-bot`
+trotzdem auf `FATAL`, startet ihn
+`docker compose exec bridge supervisorctl start bridge-bot` neu.
 
 ### Kein ClientQuery-Port
 

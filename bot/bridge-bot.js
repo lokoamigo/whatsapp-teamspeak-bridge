@@ -6,6 +6,39 @@ const net = require('net');
 const { execFile } = require('child_process');
 const { Client, ClientInfo, NoAuth, Poll } = require('whatsapp-web.js');
 
+// Errors Puppeteer raises when a WhatsApp Web navigation (e.g. the multi-step
+// logout flow) destroys the page context an in-flight call was using. The
+// next navigation re-runs the affected logic, so these must not kill the bot.
+const NAVIGATION_RACE_ERROR_PATTERNS = [
+    /Execution context was destroyed/i,
+    /Cannot find context with specified id/i,
+    /Target closed/i,
+    /Session closed/i,
+    /Protocol error\b.*\bdetached/i,
+    /Navigating frame was detached/i,
+    /Attempted to use detached Frame/i,
+];
+
+function isNavigationRaceError(error) {
+    const message = String((error && error.message) || error || '');
+    return NAVIGATION_RACE_ERROR_PATTERNS.some((pattern) => pattern.test(message));
+}
+
+// Last line of defence against library bugs that leave a promise rejection
+// unhandled (Node >= 15 terminates on those). Navigation races are survivable;
+// anything else keeps the fail-fast behaviour so supervisor restarts the bot.
+process.on('unhandledRejection', (reason) => {
+    if (isNavigationRaceError(reason)) {
+        console.error(
+            `Ignoring unhandled WhatsApp Web navigation race: ${(reason && reason.message) || reason}`,
+        );
+        return;
+    }
+    console.error('Unhandled promise rejection; exiting so supervisor restarts the bot:');
+    console.error(reason);
+    process.exit(1);
+});
+
 const TS_HOST = process.env.TS3_CLIENTQUERY_HOST || '127.0.0.1';
 const TS_PORT = Number.parseInt(process.env.TS3_CLIENTQUERY_PORT || '25639', 10);
 const TS_API_KEY = (process.env.TS3_CLIENTQUERY_API_KEY || '').trim();
@@ -122,6 +155,8 @@ const state = {
     autoAcceptingCallIds: new Set(),
     autoAcceptedCallIds: new Set(),
     lastAutoAcceptPollErrorAt: 0,
+    awaitingQr: false,
+    readyPoller: null,
     clientQuery: null,
     channelPolls: new Map(),
     pendingChannelPolls: [],
@@ -761,7 +796,11 @@ function createApiServer(waClient) {
             'GET /api/v1/health',
             async () => ({
                 statusCode: 200,
-                body: { ready: state.ready, version: BRIDGE_VERSION },
+                body: {
+                    ready: state.ready,
+                    awaitingQr: state.awaitingQr,
+                    version: BRIDGE_VERSION,
+                },
             }),
         ],
         [
@@ -1158,7 +1197,17 @@ async function createWhatsAppClient() {
         });
     });
 
+    client.on('qr', () => {
+        // WhatsApp refreshes the QR code every ~20 s; only announce the first.
+        if (state.awaitingQr) return;
+        state.awaitingQr = true;
+        console.log(
+            'WhatsApp is not linked: scan the QR code shown in Chromium via noVNC (port 6080) with WhatsApp > Linked devices.',
+        );
+    });
+
     client.on('authenticated', () => {
+        state.awaitingQr = false;
         console.log('WhatsApp Web.js authenticated.');
         setTimeout(() => {
             refreshWhatsAppReady(client).catch((error) => {
@@ -1176,6 +1225,18 @@ async function createWhatsAppClient() {
         state.activeCallId = null;
         state.activeCall = null;
         console.error(`WhatsApp Web.js disconnected: ${reason}`);
+        if (reason === 'LOGOUT') {
+            // WhatsApp ended the linked-device session (e.g. removed on the
+            // phone). WhatsApp Web clears its own session data and shows a new
+            // QR code in the same Chromium window; the bot keeps running.
+            // The Chromium profile is deliberately left untouched.
+            console.error(
+                'WhatsApp linked device was logged out. Re-link it: open noVNC (port 6080) and scan the QR code in Chromium with WhatsApp > Linked devices.',
+            );
+            // A new session needs the same ready recovery as a fresh start.
+            state.recoveredEventListenersAttached = false;
+            startReadyPoller(client);
+        }
     });
 
     client.on('call', (call) => {
@@ -1205,17 +1266,12 @@ async function createWhatsAppClient() {
 
     await client.initialize();
     await grantWhatsAppMicrophonePermission(client, 'initialize');
-    await refreshWhatsAppReady(client);
-    const readyPoller = setInterval(() => {
-        if (state.ready) {
-            clearInterval(readyPoller);
-            return;
-        }
-        refreshWhatsAppReady(client).catch((error) => {
-            console.error(`WhatsApp Web.js ready refresh failed: ${error.message}`);
-        });
-    }, 5000);
-    readyPoller.unref();
+    // The page can still be navigating here (e.g. after a logout); the ready
+    // poller retries, so a failed first check must not abort the startup.
+    await refreshWhatsAppReady(client).catch((error) => {
+        console.error(`WhatsApp Web.js ready refresh failed: ${error.message}`);
+    });
+    startReadyPoller(client);
 
     const autoAcceptPoller = setInterval(() => {
         pollIncomingWhatsAppCall(client).catch((error) => {
@@ -1229,6 +1285,21 @@ async function createWhatsAppClient() {
     autoAcceptPoller.unref();
 
     return client;
+}
+
+function startReadyPoller(client) {
+    if (state.readyPoller) return;
+    state.readyPoller = setInterval(() => {
+        if (state.ready) {
+            clearInterval(state.readyPoller);
+            state.readyPoller = null;
+            return;
+        }
+        refreshWhatsAppReady(client).catch((error) => {
+            console.error(`WhatsApp Web.js ready refresh failed: ${error.message}`);
+        });
+    }, 5000);
+    state.readyPoller.unref();
 }
 
 async function handleWhatsAppMessage(client, message) {
@@ -1872,6 +1943,8 @@ async function refreshWhatsAppReady(client) {
         return false;
     }
 
+    state.awaitingQr = false;
+
     if (!client.info && runtime.info) {
         client.info = new ClientInfo(client, runtime.info);
     }
@@ -1926,9 +1999,11 @@ async function acceptActiveWhatsAppCall(waClient, call = null, options = {}) {
 
 function whatsappStatusText() {
     const runtime = state.whatsapp;
-    if (!runtime) return `ready=${state.ready}`;
+    const awaitingQr = state.awaitingQr ? ' awaitingQr=true (scan QR via noVNC)' : '';
+    if (!runtime) return `ready=${state.ready}${awaitingQr}`;
     return [
         `ready=${state.ready}`,
+        state.awaitingQr ? 'awaitingQr=true (scan QR via noVNC)' : null,
         `state=${runtime.state || 'unknown'}`,
         `hasSynced=${runtime.hasSynced === true}`,
         `wwebjs=${runtime.wwebjs === true}`,
