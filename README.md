@@ -129,6 +129,14 @@ whoami
 
 Der Container startet Chromium jetzt über einen Node-Bot auf Basis des
 gepinnten `whatsapp-web.js`-Forks mit experimenteller Web-Call-Unterstützung.
+`BRIDGE_FORCE_WEB_CALLING=true` (Standard) aktiviert dabei die experimentelle
+`forceWebCalling`-Option des Forks. Sie setzt das lokale Calling-Feature-Gate nur
+im Speicher der Seite und initialisiert die WhatsApp-Calling-Engine nach dem
+Login automatisch. Damit bleibt kein manueller DevTools-Eingriff nach einem
+Neustart erforderlich. Mit `BRIDGE_FORCE_WEB_CALLING=false` lässt sich das
+Verhalten deaktivieren. Die PulseAudio-Mikrofone werden über
+`injectAudio: false` verwendet.
+
 Der Bot beendet vor dem Start alte Chromium-Prozesse, entfernt nur flüchtige
 Profil-Locks und öffnet WhatsApp Web anschließend frisch im persistenten Profil.
 So entsteht nicht mehr neben einem vorhandenen WhatsApp-Web-Fenster ein zweites

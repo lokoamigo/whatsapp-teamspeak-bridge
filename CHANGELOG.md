@@ -8,6 +8,18 @@ backward compatibility guarantees.
 
 ## [Unreleased]
 
+### Fixed
+
+- Outgoing calls now use the fork's current-call tracking and reject declined
+  starts instead of reporting an empty call as successfully started.
+- Calls use the PulseAudio microphone rather than a silent synthetic stream.
+
+### Added
+
+- `BRIDGE_FORCE_WEB_CALLING` (default `true`) enables the fork's experimental,
+  session-local calling gate override and engine initialization after login,
+  preserving the successful call setup across browser and container restarts.
+
 ## [0.1.1]
 
 ### Fixed
