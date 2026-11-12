@@ -13,7 +13,7 @@
     "version:bump": "node scripts/version.js bump"
   },
   "dependencies": {
-    "whatsapp-web.js": "https://github.com/lokoamigo/whatsapp-web.js-new-calling-feature/archive/4aa55061d65d0c04ca61d7e0e84b705779b3c75a.tar.gz"
+    "whatsapp-web.js": "https://github.com/lokoamigo/whatsapp-web.js-new-calling-feature/archive/d5d9f2bcd8a8f2b20ea6193618952f2c30752103.tar.gz"
   },
   "engines": {
     "node": ">=18.0.0"

@@ -49,6 +49,9 @@ const CHROMIUM_PROFILE = process.env.WWEBJS_CHROMIUM_PROFILE || '/data/chromium'
 const COMMAND_PREFIX = process.env.BRIDGE_COMMAND_PREFIX || '!wa';
 const WHATSAPP_INVITE_COMMAND =
     process.env.BRIDGE_WHATSAPP_INVITE_COMMAND || '!invite';
+const FORCE_WEB_CALLING =
+    (process.env.BRIDGE_FORCE_WEB_CALLING || 'true').trim().toLowerCase() ===
+    'true';
 const WHATSAPP_PULSE_SOURCE = process.env.BRIDGE_WHATSAPP_PULSE_SOURCE || 'ts_mic';
 const WHATSAPP_PULSE_SOURCE_NUDGE =
     process.env.BRIDGE_WHATSAPP_PULSE_SOURCE_NUDGE || 'wa_mic';
@@ -1134,6 +1137,7 @@ function extractCommand(message) {
 async function createWhatsAppClient() {
     const client = new Client({
         authStrategy: new NoAuth(),
+        forceWebCalling: FORCE_WEB_CALLING,
         userAgent: false,
         webVersionCache: {
             type: 'local',
@@ -1982,7 +1986,7 @@ async function acceptActiveWhatsAppCall(waClient, call = null, options = {}) {
             }
 
             await grantWhatsAppMicrophonePermission(waClient, 'call accept');
-            const acceptedCall = await activeCall.accept();
+            const acceptedCall = await activeCall.accept({ injectAudio: false });
             state.activeCall = acceptedCall || state.activeCall;
             state.activeCallId = acceptedCall?.id || state.activeCallId;
             await refreshWhatsAppMicrophone('call accept');
@@ -2078,7 +2082,10 @@ async function handleCommand(waClient, args) {
         await grantWhatsAppMicrophonePermission(waClient, 'call start');
         const call =
             contactIds.length === 1
-                ? await waClient.call(contactIds[0], { video: false })
+                ? await waClient.call(contactIds[0], {
+                      video: false,
+                      injectAudio: false,
+                  })
                 : await waClient.startGroupCall(contactIds, { video: false });
         state.activeCall = call;
         state.activeCallId = call.id;
