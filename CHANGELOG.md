@@ -16,6 +16,8 @@ backward compatibility guarantees.
 
 ### Added
 
+- Clickable noVNC taskbar and system tray for switching to hidden or minimized
+  windows, with an on-demand tiling button using the existing Openbox desktop.
 - Optional Mumble audio backend with `BRIDGE_VOICE_BACKEND=mumble`, server
   auto-connect through `MUMBLE_URI`, and a persistent client profile. Mumble
   builds skip TeamSpeak and its license requirement; TeamSpeak remains the default.

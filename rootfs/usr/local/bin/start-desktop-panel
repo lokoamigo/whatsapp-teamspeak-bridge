@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+/usr/local/bin/wait-for-display
+for _ in $(seq 1 60); do
+  if wmctrl -m >/dev/null 2>&1; then
+    exec /usr/bin/tint2 -c /etc/bridge/tint2rc
+  fi
+  sleep 1
+done
+echo >&2 "Openbox did not become ready for the desktop panel."
+exit 1

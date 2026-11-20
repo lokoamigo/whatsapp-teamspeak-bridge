@@ -18,7 +18,7 @@ status:
 	    mumble) set -- mumble ;; \
 	    *) set -- teamspeak clientquery-relay clientquery-watchdog ;; \
 	  esac; \
-	  exec supervisorctl status xvfb pulseaudio audio-router openbox x11vnc novnc bridge-bot "$$@"'
+	  exec supervisorctl status xvfb pulseaudio audio-router openbox desktop-panel x11vnc novnc bridge-bot "$$@"'
 
 logs:
 	$(COMPOSE) logs -f bridge

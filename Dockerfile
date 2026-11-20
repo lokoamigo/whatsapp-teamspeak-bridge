@@ -95,6 +95,8 @@ RUN useradd --create-home --uid 1000 --shell /bin/bash bridge \
 WORKDIR /opt/whatsapp-teamspeak-bridge
 COPY package.json package-lock.json ./
 COPY --from=node-deps /opt/whatsapp-teamspeak-bridge/node_modules ./node_modules
+RUN apt-get update && apt-get install -y --no-install-recommends tint2 wmctrl \
+    && rm -rf /var/lib/apt/lists/*
 COPY bot/ ./bot/
 COPY rootfs/ /
 RUN chmod +x /usr/local/bin/*
