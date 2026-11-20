@@ -146,6 +146,27 @@ ssh -L 6080:127.0.0.1:6080 \
 
 Danach weiterhin `http://127.0.0.1:6080/` lokal öffnen.
 
+### Fenster im noVNC-Desktop
+
+Eine dauerhaft sichtbare Taskleiste am unteren Bildschirmrand zeigt offene
+und minimierte Fenster. Ein Klick holt ein Fenster nach vorn; ein weiterer
+Klick auf das aktive Fenster minimiert es. Fenster anderer Arbeitsflächen
+sind ebenfalls erreichbar. Rechts erscheinen die Tray-Symbole, etwa wenn
+ein Voice-Client sein Hauptfenster in den System-Tray verbirgt.
+
+Der Kachel-Button links (**Tile windows**) stellt minimierte Fenster der
+aktuellen Arbeitsfläche wieder her und ordnet normale Fenster in einem
+Raster an. Maximierte Fenster werden verkleinert; Dialoge und Assistenten
+bleiben frei verschiebbar. Die Taskleiste bleibt außerhalb der Fensterfläche.
+Anwendungen mit einer festen Mindestgröße können bei kleinen Auflösungen
+trotzdem überlappen.
+
+Openbox bleibt der Window-Manager. Die Anordnung erfolgt auf Klick, damit
+neue Dialoge oder Anrufe keine Fenster unerwartet verschieben. Bei wenig
+Platz `DISPLAY_WIDTH`/`DISPLAY_HEIGHT` in `.env` erhöhen und `make restart`
+ausführen. In noVNC über **Settings → Scaling mode → Local Scaling** den
+gesamten Desktop einpassen.
+
 ## 4. TeamSpeak einrichten (nur TeamSpeak-Backend)
 
 Der Client startet parallel im selben noVNC-Desktop.

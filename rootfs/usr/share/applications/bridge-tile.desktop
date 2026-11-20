@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Tile windows
+Comment=Restore and arrange windows on this desktop
+Exec=/usr/local/bin/tile-bridge-windows
+Icon=/usr/share/icons/bridge-tile.svg
+Terminal=false
+StartupNotify=false
+Categories=Utility;

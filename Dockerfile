@@ -35,7 +35,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates curl wget unzip bzip2 xz-utils less tini tzdata \
       nodejs \
       chromium mumble \
-      xvfb x11vnc x11-xserver-utils xauth openbox xterm \
+      xvfb x11vnc x11-xserver-utils x11-utils xauth openbox xterm tint2 wmctrl \
       novnc websockify \
       pulseaudio pulseaudio-utils pavucontrol alsa-utils \
       dbus-x11 supervisor socat netcat-openbsd \
