@@ -16,6 +16,9 @@ backward compatibility guarantees.
 
 ### Added
 
+- Optional Mumble audio backend with `BRIDGE_VOICE_BACKEND=mumble`, server
+  auto-connect through `MUMBLE_URI`, and a persistent client profile. Mumble
+  builds skip TeamSpeak and its license requirement; TeamSpeak remains the default.
 - `BRIDGE_FORCE_WEB_CALLING` (default `true`) enables the fork's experimental,
   session-local calling gate override and engine initialization after login,
   preserving the successful call setup across browser and container restarts.

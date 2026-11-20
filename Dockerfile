@@ -16,6 +16,7 @@ FROM debian:12-slim
 ARG DEBIAN_FRONTEND=noninteractive
 ARG TS3_VERSION=3.6.2
 ARG TS3_LICENSE_ACCEPTED=NO
+ARG BRIDGE_VOICE_BACKEND=teamspeak
 ARG CLIENTQUERY_PLUGIN_URL=https://addons-content.teamspeak.com/943dd816-7ef2-48d7-82b8-d60c3b9b10b3/files/10/clientquerypluginlinuxamd64_649166b4af7f6.ts3_plugin
 
 ENV DISPLAY=:99 \
@@ -26,13 +27,14 @@ ENV DISPLAY=:99 \
     LANG=C.UTF-8 \
     LC_ALL=C.UTF-8
 
-RUN test "$TS3_LICENSE_ACCEPTED" = "YES" || \
+RUN case "$BRIDGE_VOICE_BACKEND" in teamspeak|mumble) ;; *) echo >&2 "BRIDGE_VOICE_BACKEND must be teamspeak or mumble"; exit 1 ;; esac; \
+    test "$BRIDGE_VOICE_BACKEND" = "mumble" || test "$TS3_LICENSE_ACCEPTED" = "YES" || \
     (echo >&2 "Build abgebrochen: TeamSpeak-Lizenz zuerst lesen und mit --build-arg TS3_LICENSE_ACCEPTED=YES bestätigen."; exit 1)
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates curl wget unzip bzip2 xz-utils less tini tzdata \
       nodejs \
-      chromium \
+      chromium mumble \
       xvfb x11vnc x11-xserver-utils xauth openbox xterm \
       novnc websockify \
       pulseaudio pulseaudio-utils pavucontrol alsa-utils \
@@ -52,6 +54,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # dient als ausdrückliche Zustimmung; die erwarteten Installer-Eingaben werden danach
 # reproduzierbar über stdin eingespeist. LESS=+q beendet den Lizenz-Pager sofort.
 RUN set -eux; \
+    if [ "$BRIDGE_VOICE_BACKEND" = "mumble" ]; then exit 0; fi; \
     curl -fL --retry 5 --retry-delay 2 \
       -o /tmp/teamspeak.run \
       "https://files.teamspeak-services.com/releases/client/${TS3_VERSION}/TeamSpeak3-Client-linux_amd64-${TS3_VERSION}.run"; \
@@ -74,6 +77,7 @@ RUN set -eux; \
 # ClientQuery ist die Bot-/Fernsteuerungs-Schnittstelle des TS3-Clients.
 # .ts3_plugin ist ein ZIP-Container; die Plugin-Dateien werden global installiert.
 RUN set -eux; \
+    if [ "$BRIDGE_VOICE_BACKEND" = "mumble" ]; then exit 0; fi; \
     curl -fL --retry 5 --retry-delay 2 -o /tmp/clientquery.ts3_plugin "$CLIENTQUERY_PLUGIN_URL"; \
     mkdir -p /tmp/clientquery /opt/teamspeak3/plugins; \
     unzip -q /tmp/clientquery.ts3_plugin -d /tmp/clientquery; \
@@ -94,6 +98,8 @@ COPY --from=node-deps /opt/whatsapp-teamspeak-bridge/node_modules ./node_modules
 COPY bot/ ./bot/
 COPY rootfs/ /
 RUN chmod +x /usr/local/bin/*
+
+ENV BRIDGE_VOICE_BACKEND=${BRIDGE_VOICE_BACKEND}
 
 VOLUME ["/data"]
 EXPOSE 6080 25640

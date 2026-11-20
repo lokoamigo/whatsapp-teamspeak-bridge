@@ -43,6 +43,7 @@ const TS_HOST = process.env.TS3_CLIENTQUERY_HOST || '127.0.0.1';
 const TS_PORT = Number.parseInt(process.env.TS3_CLIENTQUERY_PORT || '25639', 10);
 const TS_API_KEY = (process.env.TS3_CLIENTQUERY_API_KEY || '').trim();
 const TS3_URI = process.env.TS3_URI || '';
+const VOICE_BACKEND = process.env.BRIDGE_VOICE_BACKEND || 'teamspeak';
 const CHROMIUM_EXECUTABLE =
     process.env.WWEBJS_CHROMIUM_EXECUTABLE || '/usr/bin/chromium';
 const CHROMIUM_PROFILE = process.env.WWEBJS_CHROMIUM_PROFILE || '/data/chromium';
@@ -1441,6 +1442,9 @@ async function attachWhatsAppPollVoteBridge(client) {
 }
 
 function requireClientQuery() {
+    if (VOICE_BACKEND === 'mumble') {
+        throw new Error('Channel switching is only available with the TeamSpeak backend.');
+    }
     const query = state.clientQuery;
     if (!query || !query.socket || query.socket.destroyed) {
         throw new Error('TeamSpeak ClientQuery is not connected.');
@@ -2136,6 +2140,11 @@ async function handleCommand(waClient, args) {
 async function main() {
     const waClient = await createWhatsAppClient();
     createApiServer(waClient);
+
+    if (VOICE_BACKEND === 'mumble') {
+        console.log('WhatsApp is running with Mumble audio; TeamSpeak command control is disabled.');
+        return;
+    }
 
     if (!TS_API_KEY) {
         console.log('TS3_CLIENTQUERY_API_KEY is not set; WhatsApp is running without TeamSpeak command control.');

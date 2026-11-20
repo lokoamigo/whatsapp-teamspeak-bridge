@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -euo pipefail
+/usr/local/bin/wait-for-display
+/usr/local/bin/wait-for-audio
+
+export HOME=/data/mumble
+export XDG_CONFIG_HOME=/data/mumble/.config
+export XDG_DATA_HOME=/data/mumble/.local/share
+# Reuse the crossed voice/WhatsApp devices so Chromium keeps its saved microphone.
+export PULSE_SINK=ts_out
+export PULSE_SOURCE=wa_mic
+export QT_X11_NO_MITSHM=1
+export LIBGL_ALWAYS_SOFTWARE=1
+
+mkdir -p "$HOME" "$XDG_CONFIG_HOME" "$XDG_DATA_HOME"
+
+args=()
+if [[ -n "${MUMBLE_URI:-}" ]]; then
+  if [[ "$MUMBLE_URI" != mumble://* ]]; then
+    echo >&2 "MUMBLE_URI must start with mumble://."
+    exit 1
+  fi
+  args+=("$MUMBLE_URI")
+fi
+exec /usr/bin/mumble "${args[@]}"
