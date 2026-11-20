@@ -1,13 +1,14 @@
-# WhatsApp-Web ↔ TeamSpeak-Audio-Bridge
+# WhatsApp-Web ↔ TeamSpeak-/Mumble-Audio-Bridge
 
 Ein einzelner Linux-Container mit:
 
 - Chromium + WhatsApp Web
 - TeamSpeak 3 Client 3.6.2
+- alternativ Mumble als Voice-Backend (`BRIDGE_VOICE_BACKEND=mumble`)
 - ClientQuery-Plugin als Bot-/Fernsteuerungsschnittstelle
 - zwei gekreuzten virtuellen PulseAudio-Geräten
 - noVNC-Weboberfläche für QR-Code und GUI
-- persistentem Docker-Volume für WhatsApp-Login und TeamSpeak-Konfiguration
+- persistentem Docker-Volume für WhatsApp-Login und Voice-Client-Konfiguration
 
 ## Audiofluss
 
@@ -17,13 +18,16 @@ WhatsApp-Wiedergabe  -> wa_out -> wa_out.monitor -> wa_mic -> TeamSpeak-Mikrofon
 ```
 
 Es wird keine physische Soundkarte benötigt.
+Im Mumble-Modus ersetzt Mumble TeamSpeak in diesem Audiofluss. Die internen
+Gerätenamen `ts_out`, `ts_mic`, `wa_out` und `wa_mic` bleiben dabei erhalten,
+damit Chromium sein gespeichertes Mikrofon weiterverwenden kann.
 
 ## Voraussetzungen
 
 - Docker Engine mit Docker Compose v2
 - Linux-Host auf `amd64/x86_64`
 - mindestens etwa 2 CPU-Kerne und 3–4 GB RAM empfohlen
-- ein WhatsApp-Konto und Zugang zum gewünschten TeamSpeak-Server
+- ein WhatsApp-Konto und Zugang zum gewünschten TeamSpeak- oder Mumble-Server
 
 ## 1. Konfiguration
 
@@ -48,6 +52,53 @@ TS3_URI=ts3server://ts.example.org?port=9987&nickname=WhatsAppBridge
 ```
 
 Passwörter, Channel-Namen und Sonderzeichen müssen in der URI URL-kodiert werden. Alternativ später im GUI verbinden und als Bookmark mit Auto-Connect speichern.
+
+### Mumble statt TeamSpeak
+
+Für Mumble in `.env` setzen:
+
+```dotenv
+BRIDGE_VOICE_BACKEND=mumble
+MUMBLE_URI=mumble://WhatsAppBridge@mumble.example.org:64738/Bridge
+```
+
+`MUMBLE_URI` ist optional; ohne URI erfolgt die Serverauswahl im noVNC-Desktop.
+Das [Mumble-URI-Format](https://www.mumble.info/documentation/user/mumble-url/)
+unterstützt Benutzername, Serverpasswort, Port und Kanalpfad, zum Beispiel
+`mumble://WhatsAppBridge:serverpasswort@mumble.example.org:64738/Parent/Bridge`.
+Sonderzeichen in Benutzername, Passwort und Kanalnamen URL-kodieren.
+Die URI vertraulich behandeln, wenn sie ein Passwort enthält.
+
+Danach mit `make restart` bauen und starten. Mumble-Builds laden TeamSpeak und
+ClientQuery nicht herunter und benötigen kein `TS3_LICENSE_ACCEPTED=YES`.
+Ein Wechsel des Backends erfordert ebenfalls `make restart`, damit Image und
+Laufzeitkonfiguration zusammenpassen. Standard bleibt `teamspeak`.
+
+Beim ersten Start über noVNC die Mumble-Einrichtung und gegebenenfalls den
+Serverzertifikat-Dialog abschließen. Zertifikate, Identität und Einstellungen
+bleiben unter `/data/mumble` im bestehenden `bridge-data`-Volume erhalten.
+Die WhatsApp- und TeamSpeak-Profile bleiben beim Backend-Wechsel erhalten.
+
+Unter **Configure → Settings** die [Mumble-Audioeinstellungen](https://www.mumble.info/documentation/user/audio-settings/)
+für die Bridge setzen:
+
+- Audio Input und Output: System **PulseAudio**, Gerät **Default**.
+- Audio Input: Übertragung **Continuous**, damit WhatsApp ohne Tastendruck übertragen wird.
+- Echo-Unterdrückung und automatische Absenkung anderer Anwendungen deaktivieren.
+- Text-to-Speech und Ereignistöne deaktivieren, damit diese nicht an WhatsApp übertragen werden.
+
+Das Startskript und der Audio-Router legen Mumble-Wiedergabe auf `ts_out` und
+Mumble-Aufnahme auf `wa_mic`. Bei manuell gewählten Geräten entsprechend
+`TeamSpeak_to_WhatsApp` für die Wiedergabe und
+`WhatsApp_to_TeamSpeak_Microphone` für die Aufnahme auswählen; diese Namen
+gelten aus Kompatibilitätsgründen auch im Mumble-Modus.
+
+Mumble wird als Audio-Client verwendet. `!wa`-Textbefehle über Mumble-Chat und
+`!switchChannel` für Mumble sind nicht implementiert. WhatsApp nimmt eingehende
+Anrufe weiterhin automatisch an; `!invite` und die HTTP-Status-API bleiben
+verfügbar. Ausgehende Anrufe können im WhatsApp-Fenster gestartet werden.
+TeamSpeak, ClientQuery-Relay und ClientQuery-Watchdog bleiben im Mumble-Modus
+gestoppt; entsprechend ist Port `25640` dann ohne Funktion.
 
 ## 2. Bauen und starten
 
@@ -95,7 +146,7 @@ ssh -L 6080:127.0.0.1:6080 \
 
 Danach weiterhin `http://127.0.0.1:6080/` lokal öffnen.
 
-## 4. TeamSpeak einrichten
+## 4. TeamSpeak einrichten (nur TeamSpeak-Backend)
 
 Der Client startet parallel im selben noVNC-Desktop.
 

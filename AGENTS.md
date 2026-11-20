@@ -8,6 +8,14 @@ Dieses Projekt baut einen einzelnen Docker-Container als WhatsApp-Web-zu-TeamSpe
 
 Der Node-Bot in `bot/bridge-bot.js` ist der Besitzer der sichtbaren Chromium-Instanz. Keine zweite Selenium-, ChromeDriver- oder parallele Browsersteuerung einfuehren.
 
+`BRIDGE_VOICE_BACKEND=mumble` waehlt alternativ den Mumble-Client statt TeamSpeak.
+`MUMBLE_URI` steuert dessen Auto-Connect; das persistente Profil liegt unter
+`/data/mumble`. Mumble nutzt dieselben PulseAudio-Geraete (`ts_out`/`wa_mic`)
+wie TeamSpeak. Im Mumble-Modus bleiben TeamSpeak und ClientQuery-Dienste
+gestoppt; der WhatsApp-Bot laeuft ohne TeamSpeak-Textsteuerung weiter.
+Beim Backend-Wechsel mit `make restart` auch neu bauen: Mumble-Builds enthalten
+keinen TeamSpeak-Client und benoetigen dessen Lizenzbestaetigung nicht.
+
 ## Wichtige Sicherheitsregeln
 
 - Keine persistenten WhatsApp- oder TeamSpeak-Daten loeschen.

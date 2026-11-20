@@ -13,7 +13,12 @@ up:
 
 status:
 	$(COMPOSE) ps
-	$(COMPOSE) exec bridge supervisorctl status
+	$(COMPOSE) exec bridge sh -c '\
+	  case "$${BRIDGE_VOICE_BACKEND:-teamspeak}" in \
+	    mumble) set -- mumble ;; \
+	    *) set -- teamspeak clientquery-relay clientquery-watchdog ;; \
+	  esac; \
+	  exec supervisorctl status xvfb pulseaudio audio-router openbox x11vnc novnc bridge-bot "$$@"'
 
 logs:
 	$(COMPOSE) logs -f bridge

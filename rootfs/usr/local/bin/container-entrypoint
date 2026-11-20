@@ -1,6 +1,24 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+export BRIDGE_VOICE_BACKEND="${BRIDGE_VOICE_BACKEND:-teamspeak}"
+case "$BRIDGE_VOICE_BACKEND" in
+  teamspeak)
+    if [[ ! -x /opt/teamspeak3/ts3client_runscript.sh ]]; then
+      echo >&2 "TeamSpeak is not installed. Rebuild with BRIDGE_VOICE_BACKEND=teamspeak."
+      exit 1
+    fi
+    export BRIDGE_TEAMSPEAK_AUTOSTART=true BRIDGE_MUMBLE_AUTOSTART=false
+    ;;
+  mumble)
+    export BRIDGE_TEAMSPEAK_AUTOSTART=false BRIDGE_MUMBLE_AUTOSTART=true
+    ;;
+  *)
+    echo >&2 "BRIDGE_VOICE_BACKEND must be teamspeak or mumble."
+    exit 1
+    ;;
+esac
+
 # Xorg erwartet das gemeinsame Unix-Socket-Verzeichnis als root:root mit Sticky-Bit.
 install -d -o root -g root -m 1777 /tmp/.X11-unix
 
@@ -10,6 +28,7 @@ install -d -o bridge -g bridge -m 0700 \
   /data/home/.config/pulse \
   /data/chromium \
   /data/teamspeak \
+  /data/mumble \
   /data/vnc \
   /tmp/runtime-bridge \
   /tmp/runtime-bridge/pulse

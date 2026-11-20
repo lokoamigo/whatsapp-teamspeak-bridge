@@ -54,6 +54,7 @@ route_streams() {
     /^Sink Input #/ { id = substr($3, 2) }
     /application.process.binary = "chromium"/ { print id " wa_out" }
     /application.process.binary = "ts3client_linux_amd64"/ { print id " ts_out" }
+    /application.process.binary = "mumble"/ { print id " ts_out" }
   ' | while read -r input target; do
     [[ -n "${input:-}" && -n "${target:-}" ]] || continue
     pactl move-sink-input "$input" "$target" >/dev/null 2>&1 || true
@@ -63,6 +64,7 @@ route_streams() {
     /^Source Output #/ { id = substr($3, 2) }
     /application.process.binary = "chromium"/ { print id " " whatsapp_source }
     /application.process.binary = "ts3client_linux_amd64"/ { print id " wa_mic" }
+    /application.process.binary = "mumble"/ { print id " wa_mic" }
   ' | while read -r output target; do
     [[ -n "${output:-}" && -n "${target:-}" ]] || continue
     if [[ "$target" = "$whatsapp_source" ]] && ! grep -qx "$output" "$seen_chromium_sources" 2>/dev/null; then

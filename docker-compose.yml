@@ -5,6 +5,7 @@ services:
       args:
         TS3_VERSION: "${TS3_VERSION:-3.6.2}"
         TS3_LICENSE_ACCEPTED: "${TS3_LICENSE_ACCEPTED:-NO}"
+        BRIDGE_VOICE_BACKEND: "${BRIDGE_VOICE_BACKEND:-teamspeak}"
     container_name: whatsapp-teamspeak-bridge
     restart: unless-stopped
     shm_size: "2gb"
@@ -15,6 +16,8 @@ services:
       DISPLAY_HEIGHT: "${DISPLAY_HEIGHT:-900}"
       DISPLAY_DEPTH: "${DISPLAY_DEPTH:-24}"
       TS3_URI: "${TS3_URI:-}"
+      BRIDGE_VOICE_BACKEND: "${BRIDGE_VOICE_BACKEND:-teamspeak}"
+      MUMBLE_URI: "${MUMBLE_URI:-}"
       TS3_CLIENTQUERY_API_KEY: "${TS3_CLIENTQUERY_API_KEY:-}"
       BRIDGE_COMMAND_PREFIX: "${BRIDGE_COMMAND_PREFIX:-!wa}"
       BRIDGE_COMMANDER_UIDS: "${BRIDGE_COMMANDER_UIDS:-}"
