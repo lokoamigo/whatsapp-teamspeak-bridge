@@ -25,6 +25,8 @@ function createFakeMumble(respond) {
     ]);
     mumble.session = 11;
     mumble.moves = [];
+    mumble.texts = [];
+    mumble.sendTextMessage = (message) => mumble.texts.push(message);
     mumble.findUserByName = (name) =>
         [...mumble.users.values()].find(
             (user) => user.session !== mumble.session && user.name.toLowerCase() === name.toLowerCase(),
@@ -106,6 +108,33 @@ test('Mumble channel control reports missing preconditions', async () => {
         control(createFakeMumble(acceptMove), { getClient: () => null }).listSwitchableChannels(),
         /command bot is not connected/,
     );
+});
+
+test('Mumble channel messages go to the bridge user\'s channel, else the bot\'s', async () => {
+    const mumble = createFakeMumble(acceptMove);
+    mumble.users.get(10).channelId = 2;
+    mumble.self = mumble.users.get(11);
+    await control(mumble).sendChannelMessage('hello');
+    await control(mumble, { bridgeUsername: '' }).sendChannelMessage('fallback');
+    assert.deepStrictEqual(mumble.texts, [
+        { channelIds: [2], text: 'hello' },
+        { channelIds: [1], text: 'fallback' },
+    ]);
+});
+
+test('TeamSpeak channel messages target the bridge client\'s current channel', async () => {
+    const { ClientQuery } = require('../bot/teamspeak/client-query');
+    const query = new ClientQuery();
+    const sent = [];
+    query.command = async (text) => {
+        sent.push(text);
+        return text === 'whoami' ? ['clid=7 cid=42', 'error id=0 msg=ok'] : ['error id=0 msg=ok'];
+    };
+    await query.sendChannelMessage('📞 Someone joined the WhatsApp call (2 on WhatsApp).');
+    assert.deepStrictEqual(sent, [
+        'whoami',
+        'sendtextmessage targetmode=2 target=42 msg=📞\\sSomeone\\sjoined\\sthe\\sWhatsApp\\scall\\s(2\\son\\sWhatsApp).',
+    ]);
 });
 
 test('only move-related permission denials count as move failures', () => {

@@ -233,6 +233,17 @@ async function main() {
     await waitFor('bot follows the moved bridge user', () => botUser().channelId === bridgeChannel);
     step('with Move permission the bridge user is moved and the bot follows');
 
+    commander.moveToChannel(bridgeChannel);
+    await waitFor('commander in bridge channel', () =>
+        admin.findUserByName('Commander').channelId === bridgeChannel,
+    );
+    await expectReply(
+        commander,
+        () => channelControl.sendChannelMessage('📞 Someone joined the WhatsApp call (2 on WhatsApp).'),
+        /^📞 Someone joined the WhatsApp call \(2 on WhatsApp\)\.$/,
+    );
+    step('call announcement reaches users in the bridge channel');
+
     bot.stop();
     for (const client of [admin, commander, stranger, bridge]) client.close('done');
     console.log(`\n${pass} checks passed.\nBot log:\n  ${logs.join('\n  ')}`);

@@ -16,6 +16,7 @@ function requireClientQuery() {
 const teamSpeakChannels = {
     listSwitchableChannels: () => requireClientQuery().listSwitchableChannels(),
     moveToChannel: (channel) => requireClientQuery().moveSelfToChannel(channel),
+    sendChannelMessage: (text) => requireClientQuery().sendChannelMessage(text),
 };
 
 module.exports = { requireClientQuery, teamSpeakChannels };

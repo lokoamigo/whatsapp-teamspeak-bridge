@@ -119,7 +119,20 @@ function createMumbleChannelControl({
         await moved;
     }
 
-    return { listSwitchableChannels, moveToChannel };
+    // Posts to the bridge user's channel; falls back to the bot's own channel
+    // (they normally match, as the bot follows the bridge user).
+    async function sendChannelMessage(text) {
+        const mumble = getClient();
+        if (!mumble || !mumble.synced || !mumble.socket || mumble.socket.destroyed) {
+            throw new Error('The Mumble command bot is not connected.');
+        }
+        const bridgeUser = bridgeUsername ? mumble.findUserByName(bridgeUsername) : undefined;
+        const channelId = bridgeUser ? bridgeUser.channelId : mumble.self && mumble.self.channelId;
+        if (channelId === undefined) throw new Error('Could not determine the Mumble channel.');
+        mumble.sendTextMessage({ channelIds: [channelId], text });
+    }
+
+    return { listSwitchableChannels, moveToChannel, sendChannelMessage };
 }
 
 module.exports = { createMumbleChannelControl, isMoveDenial };

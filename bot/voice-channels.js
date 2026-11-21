@@ -1,12 +1,14 @@
 'use strict';
 
-// Backend-neutral channel switching for `!switchChannel`. The active voice
-// backend registers its channel control in state.voiceChannels:
+// Backend-neutral channel control for `!switchChannel` and call
+// announcements. The active voice backend registers it in state.voiceChannels:
 //
 //   listSwitchableChannels(): Promise<Array<{ id, name }>>
 //       channels the bridge client can move to (its current one excluded)
 //   moveToChannel(channel): Promise<void>
 //       moves the bridge client, resolving once the server confirmed it
+//   sendChannelMessage(text): Promise<void>
+//       posts a chat message to the bridge client's current channel
 
 const { VOICE_BACKEND_LABEL } = require('./config');
 const state = require('./state');
