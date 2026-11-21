@@ -77,6 +77,10 @@ Laufzeitkonfiguration zusammenpassen. Standard bleibt `teamspeak`.
 Beim ersten Start über noVNC die Mumble-Einrichtung und gegebenenfalls den
 Serverzertifikat-Dialog abschließen. Zertifikate, Identität und Einstellungen
 bleiben unter `/data/mumble` im bestehenden `bridge-data`-Volume erhalten.
+Mumble 1.3 schreibt seine Einstellungen nur beim sauberen Beenden. Beim Stoppen
+schließt `start-mumble` daher offene Dialoge und beendet Mumble über dessen
+eigene Quit-Aktion (`stop_grace_period: 30s`). `docker kill` oder ein harter
+Absturz verwerfen seit dem letzten Start geänderte Mumble-Einstellungen.
 Die WhatsApp- und TeamSpeak-Profile bleiben beim Backend-Wechsel erhalten.
 
 Unter **Configure → Settings** die [Mumble-Audioeinstellungen](https://www.mumble.info/documentation/user/audio-settings/)

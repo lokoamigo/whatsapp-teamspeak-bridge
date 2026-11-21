@@ -38,7 +38,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       xvfb x11vnc x11-xserver-utils x11-utils xauth openbox xterm tint2 wmctrl \
       novnc websockify \
       pulseaudio pulseaudio-utils pavucontrol alsa-utils \
-      dbus-x11 supervisor socat netcat-openbsd \
+      dbus-x11 supervisor socat netcat-openbsd xdotool \
       python3 \
       fonts-liberation fonts-noto-color-emoji \
       libasound2 libdbus-1-3 libevent-2.1-7 libglib2.0-0 libnss3 libxss1 \
