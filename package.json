@@ -7,6 +7,7 @@
   "main": "bot/bridge-bot.js",
   "scripts": {
     "start": "node bot/bridge-bot.js",
+    "test": "node --test tests/*.test.js",
     "version:show": "node scripts/version.js show",
     "version:check": "node scripts/version.js check",
     "version:check-tag": "node scripts/version.js check-tag",

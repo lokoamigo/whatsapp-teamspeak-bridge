@@ -97,10 +97,10 @@ Mumble-Aufnahme auf `wa_mic`. Bei manuell gewählten Geräten entsprechend
 `WhatsApp_to_TeamSpeak_Microphone` für die Aufnahme auswählen; diese Namen
 gelten aus Kompatibilitätsgründen auch im Mumble-Modus.
 
-Mumble wird als Audio-Client verwendet. `!wa`-Textbefehle über Mumble-Chat und
-`!switchChannel` für Mumble sind nicht implementiert. WhatsApp nimmt eingehende
-Anrufe weiterhin automatisch an; `!invite` und die HTTP-Status-API bleiben
-verfügbar. Ausgehende Anrufe können im WhatsApp-Fenster gestartet werden.
+Mumble wird als Audio-Client verwendet. `!wa`-Textbefehle funktionieren über
+den Mumble-Chat (siehe [Steuerung per Mumble-Chat](#steuerung-per-mumble-chat));
+`!switchChannel` ist für Mumble nicht implementiert. `!invite` und die
+HTTP-Status-API bleiben verfügbar.
 TeamSpeak, ClientQuery-Relay und ClientQuery-Watchdog bleiben im Mumble-Modus
 gestoppt; entsprechend ist Port `25640` dann ohne Funktion.
 
@@ -274,6 +274,46 @@ Fallback fuer den aktuell sichtbaren eingehenden Anruf verfuegbar. `!wa call
 <gruppe>` und `!wa callgroup <gruppe>` nutzen keine WhatsApp-Chatgruppe,
 sondern die in `BRIDGE_CONTACT_GROUPS` definierte Liste einzelner Kontakte.
 WhatsApp-Gruppen-IDs (`@g.us`) werden weiterhin abgewiesen.
+
+### Steuerung per Mumble-Chat
+
+Im Mumble-Modus verbindet sich der Bot zusätzlich als eigener Mumble-Nutzer
+`<Nutzername aus MUMBLE_URI>-Bot` (ohne URI-Nutzername `WhatsAppBridge-Bot`)
+mit dem Server aus `MUMBLE_URI`. Er ist stummgeschaltet und taub, überträgt also
+kein Audio, und folgt dem Bridge-Client automatisch in dessen Kanal. Ist der
+Bridge-Client nicht unter dem URI-Nutzernamen verbunden, betritt der Bot den
+Kanal aus dem URI-Pfad. Ohne `MUMBLE_URI` bleibt die Chat-Steuerung deaktiviert.
+
+Befehle funktionieren auf zwei Wegen, die Antwort kommt jeweils als private
+Nachricht:
+
+- im Kanal-Chat mit Prefix, z. B. `!wa status`; Kanalnachrichten ohne Prefix
+  werden ignoriert,
+- als private Nachricht an den Bot-Nutzer, dort auch ohne Prefix (`status`).
+
+Der Befehlsumfang entspricht den TeamSpeak-Befehlen oben (`!wa help`).
+
+Im Mumble-Modus enthält `BRIDGE_COMMANDER_UIDS` statt TeamSpeak-UIDs
+Mumble-Zertifikat-Hashes (SHA-1, 40 Hex-Zeichen, kommagetrennt). Ein nicht
+berechtigter Nutzer bekommt seinen Hash in der Fehlermeldung angezeigt; Nutzer
+ohne Zertifikat werden dann abgewiesen. Bleibt die Liste leer, darf jeder
+Nutzer, der den Bot erreicht, Befehle ausführen.
+
+Optional verwendet `MUMBLE_BOT_URI` für den Bot einen eigenen Nutzernamen,
+Server, eigenes Serverpasswort oder Kanalpfad, z. B.
+`mumble://WhatsAppBot:serverpasswort@mumble.example.org:64738/Bridge`.
+
+Der Bot erzeugt beim ersten Start mit `openssl` ein eigenes Client-Zertifikat
+unter `/data/mumble/bridge-bot/`. Damit kann er auf dem Server registriert oder
+per ACL berechtigt werden. Ein nicht CA-signiertes Serverzertifikat wird wie im
+Mumble-Client beim ersten Verbinden vertraut und in
+`/data/mumble/bridge-bot/known-servers.json` gespeichert. Ändert es sich später,
+verweigert der Bot die Verbindung und meldet das im Log. Nach einem
+beabsichtigten Zertifikatswechsel den Eintrag aus der Datei entfernen.
+
+Mumble-Server begrenzen Statusänderungen und Textnachrichten pro Nutzer
+(Standard: 1/s, Burst 5) und verwerfen Überzähliges kommentarlos. Der Bot hält
+sich daran, Antworten können deshalb kurz verzögert ankommen.
 
 ## HTTP-API
 

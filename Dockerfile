@@ -32,7 +32,7 @@ RUN case "$BRIDGE_VOICE_BACKEND" in teamspeak|mumble) ;; *) echo >&2 "BRIDGE_VOI
     (echo >&2 "Build abgebrochen: TeamSpeak-Lizenz zuerst lesen und mit --build-arg TS3_LICENSE_ACCEPTED=YES bestätigen."; exit 1)
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates curl wget unzip bzip2 xz-utils less tini tzdata \
+      ca-certificates openssl curl wget unzip bzip2 xz-utils less tini tzdata \
       nodejs \
       chromium mumble \
       xvfb x11vnc x11-xserver-utils x11-utils xauth openbox xterm tint2 wmctrl \

@@ -5,6 +5,7 @@ const { version: BRIDGE_VERSION } = require('../package.json');
 const net = require('net');
 const { execFile } = require('child_process');
 const { Client, ClientInfo, NoAuth, Poll } = require('whatsapp-web.js');
+const { createMumbleCommandBot, getMumbleBotConfig } = require('./mumble-commands');
 
 // Errors Puppeteer raises when a WhatsApp Web navigation (e.g. the multi-step
 // logout flow) destroys the page context an in-flight call was using. The
@@ -44,6 +45,9 @@ const TS_PORT = Number.parseInt(process.env.TS3_CLIENTQUERY_PORT || '25639', 10)
 const TS_API_KEY = (process.env.TS3_CLIENTQUERY_API_KEY || '').trim();
 const TS3_URI = process.env.TS3_URI || '';
 const VOICE_BACKEND = process.env.BRIDGE_VOICE_BACKEND || 'teamspeak';
+const MUMBLE_URI = process.env.MUMBLE_URI || '';
+const MUMBLE_BOT_URI = process.env.MUMBLE_BOT_URI || '';
+const MUMBLE_BOT_DATA_DIR = process.env.MUMBLE_BOT_DATA_DIR || '/data/mumble/bridge-bot';
 const CHROMIUM_EXECUTABLE =
     process.env.WWEBJS_CHROMIUM_EXECUTABLE || '/usr/bin/chromium';
 const CHROMIUM_PROFILE = process.env.WWEBJS_CHROMIUM_PROFILE || '/data/chromium';
@@ -2032,6 +2036,30 @@ function assertCommander(event) {
     }
 }
 
+async function runMumbleCommandBot(waClient) {
+    let config;
+    try {
+        config = getMumbleBotConfig(MUMBLE_URI, MUMBLE_BOT_URI);
+    } catch (error) {
+        console.error(`Mumble command control disabled: ${error.message}`);
+        return;
+    }
+    if (!config) {
+        console.log('MUMBLE_URI is not set; WhatsApp is running without Mumble command control.');
+        return;
+    }
+    await createMumbleCommandBot({
+        config,
+        dataDir: MUMBLE_BOT_DATA_DIR,
+        release: `whatsapp-teamspeak-bridge ${BRIDGE_VERSION}`,
+        commandPrefix: COMMAND_PREFIX,
+        commanderIds: COMMANDER_UIDS,
+        extractCommand,
+        parseArgs,
+        handleCommand: (args) => handleCommand(waClient, args),
+    }).run();
+}
+
 async function handleCommand(waClient, args) {
     const command = (args.shift() || 'help').toLowerCase();
 
@@ -2142,7 +2170,7 @@ async function main() {
     createApiServer(waClient);
 
     if (VOICE_BACKEND === 'mumble') {
-        console.log('WhatsApp is running with Mumble audio; TeamSpeak command control is disabled.');
+        await runMumbleCommandBot(waClient);
         return;
     }
 
