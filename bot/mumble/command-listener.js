@@ -1,6 +1,7 @@
 'use strict';
 
-// Runs the Mumble chat bot that answers `!wa` commands in Mumble mode.
+// Runs the Mumble chat bot that answers `!wa` commands in Mumble mode and
+// provides Mumble channel switching for `!switchChannel`.
 
 const {
     BRIDGE_VERSION,
@@ -10,8 +11,10 @@ const {
     MUMBLE_BOT_URI,
     MUMBLE_URI,
 } = require('../config');
+const state = require('../state');
 const { parseArgs } = require('../util');
 const { extractCommand, handleCommand } = require('../commands');
+const { createMumbleChannelControl } = require('./channels');
 const { createMumbleCommandBot, getMumbleBotConfig } = require('./commands');
 
 async function runMumbleCommandBot(waClient) {
@@ -26,7 +29,7 @@ async function runMumbleCommandBot(waClient) {
         console.log('MUMBLE_URI is not set; WhatsApp is running without Mumble command control.');
         return;
     }
-    await createMumbleCommandBot({
+    const bot = createMumbleCommandBot({
         config,
         dataDir: MUMBLE_BOT_DATA_DIR,
         release: `whatsapp-teamspeak-bridge ${BRIDGE_VERSION}`,
@@ -35,7 +38,13 @@ async function runMumbleCommandBot(waClient) {
         extractCommand,
         parseArgs,
         handleCommand: (args) => handleCommand(waClient, args),
-    }).run();
+    });
+    state.voiceChannels = createMumbleChannelControl({
+        getClient: () => bot.client,
+        bridgeUsername: config.bridgeUsername,
+        botUsername: config.username,
+    });
+    await bot.run();
 }
 
 module.exports = { runMumbleCommandBot };

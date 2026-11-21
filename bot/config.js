@@ -24,6 +24,7 @@ const TS_PORT = Number.parseInt(process.env.TS3_CLIENTQUERY_PORT || '25639', 10)
 const TS_API_KEY = (process.env.TS3_CLIENTQUERY_API_KEY || '').trim();
 const TS3_URI = process.env.TS3_URI || '';
 const VOICE_BACKEND = process.env.BRIDGE_VOICE_BACKEND || 'teamspeak';
+const VOICE_BACKEND_LABEL = VOICE_BACKEND === 'mumble' ? 'Mumble' : 'TeamSpeak';
 const MUMBLE_URI = process.env.MUMBLE_URI || '';
 const MUMBLE_BOT_URI = process.env.MUMBLE_BOT_URI || '';
 const MUMBLE_BOT_DATA_DIR = process.env.MUMBLE_BOT_DATA_DIR || '/data/mumble/bridge-bot';
@@ -112,6 +113,7 @@ module.exports = {
     TS_API_KEY,
     TS3_URI,
     VOICE_BACKEND,
+    VOICE_BACKEND_LABEL,
     MUMBLE_URI,
     MUMBLE_BOT_URI,
     MUMBLE_BOT_DATA_DIR,
