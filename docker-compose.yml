@@ -8,6 +8,8 @@ services:
         BRIDGE_VOICE_BACKEND: "${BRIDGE_VOICE_BACKEND:-teamspeak}"
     container_name: whatsapp-teamspeak-bridge
     restart: unless-stopped
+    # Gives Mumble time to quit cleanly and save its settings on stop/restart.
+    stop_grace_period: 30s
     shm_size: "2gb"
     environment:
       TZ: "${TZ:-Europe/Berlin}"

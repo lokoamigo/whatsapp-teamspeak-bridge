@@ -13,6 +13,9 @@ backward compatibility guarantees.
 - Outgoing calls now use the fork's current-call tracking and reject declined
   starts instead of reporting an empty call as successfully started.
 - Calls use the PulseAudio microphone rather than a silent synthetic stream.
+- Mumble settings (audio setup, certificate, wizard state) now survive container
+  restarts. Mumble 1.3 only saves them on a clean exit, so stopping the
+  container now quits Mumble through its own Quit action instead of SIGTERM.
 
 ### Added
 

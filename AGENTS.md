@@ -11,7 +11,9 @@ Der Node-Bot in `bot/bridge-bot.js` ist der Besitzer der sichtbaren Chromium-Ins
 `BRIDGE_VOICE_BACKEND=mumble` waehlt alternativ den Mumble-Client statt TeamSpeak.
 `MUMBLE_URI` steuert dessen Auto-Connect; das persistente Profil liegt unter
 `/data/mumble`. Mumble nutzt dieselben PulseAudio-Geraete (`ts_out`/`wa_mic`)
-wie TeamSpeak. Im Mumble-Modus bleiben TeamSpeak und ClientQuery-Dienste
+wie TeamSpeak. Mumble 1.3 speichert `Mumble.conf` nur beim sauberen
+Beenden; `start-mumble` faengt SIGTERM ab und beendet Mumble per Ctrl+Q. Fuer
+das Mumble-Programm in Supervisor deshalb `stopasgroup=false` beibehalten. Im Mumble-Modus bleiben TeamSpeak und ClientQuery-Dienste
 gestoppt; der WhatsApp-Bot laeuft ohne TeamSpeak-Textsteuerung weiter.
 Beim Backend-Wechsel mit `make restart` auch neu bauen: Mumble-Builds enthalten
 keinen TeamSpeak-Client und benoetigen dessen Lizenzbestaetigung nicht.
