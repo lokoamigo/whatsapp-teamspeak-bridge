@@ -14,7 +14,13 @@ Der Node-Bot in `bot/bridge-bot.js` ist der Besitzer der sichtbaren Chromium-Ins
 wie TeamSpeak. Mumble 1.3 speichert `Mumble.conf` nur beim sauberen
 Beenden; `start-mumble` faengt SIGTERM ab und beendet Mumble per Ctrl+Q. Fuer
 das Mumble-Programm in Supervisor deshalb `stopasgroup=false` beibehalten. Im Mumble-Modus bleiben TeamSpeak und ClientQuery-Dienste
-gestoppt; der WhatsApp-Bot laeuft ohne TeamSpeak-Textsteuerung weiter.
+gestoppt. Die `!wa`-Befehle laufen dann ueber den Mumble-Chat:
+`bot/mumble-commands.js` verbindet einen eigenen, tauben Bot-Nutzer
+(`bot/mumble-client.js`, Mumble-TCP-Protokoll ohne Abhaengigkeiten) mit dem
+Server aus `MUMBLE_URI`/`MUMBLE_BOT_URI`. Bot-Zertifikat und gepinnte
+Server-Fingerprints liegen unter `/data/mumble/bridge-bot`. Tests:
+`npm test` (Unit) und `tests/mumble-commands/run.sh` (E2E gegen einen
+Mumble-Server in Docker).
 Beim Backend-Wechsel mit `make restart` auch neu bauen: Mumble-Builds enthalten
 keinen TeamSpeak-Client und benoetigen dessen Lizenzbestaetigung nicht.
 

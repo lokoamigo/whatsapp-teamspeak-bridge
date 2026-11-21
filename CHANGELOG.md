@@ -19,6 +19,10 @@ backward compatibility guarantees.
 
 ### Added
 
+- `!wa` chat commands in Mumble mode. A self-deafened `<user>-Bot` Mumble user
+  follows the bridge client's channel and answers prefixed channel messages
+  and private messages. `BRIDGE_COMMANDER_UIDS` takes Mumble certificate hashes
+  there; `MUMBLE_BOT_URI` optionally sets a separate bot identity or server.
 - Clickable noVNC taskbar and system tray for switching to hidden or minimized
   windows, with an on-demand tiling button using the existing Openbox desktop.
 - Optional Mumble audio backend with `BRIDGE_VOICE_BACKEND=mumble`, server
