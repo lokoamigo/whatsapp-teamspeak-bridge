@@ -13,8 +13,8 @@ const {
     mumbleHtmlToText,
     parseMumbleUri,
     textToMumbleHtml,
-} = require('../bot/mumble-client');
-const { getMumbleBotConfig } = require('../bot/mumble-commands');
+} = require('../bot/mumble/client');
+const { getMumbleBotConfig } = require('../bot/mumble/commands');
 
 test('protobuf round trip keeps varints, strings and repeated fields', () => {
     const buffer = encodeMessage([

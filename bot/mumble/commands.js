@@ -10,7 +10,7 @@ const {
     ensureClientCertificate,
     mumbleHtmlToText,
     parseMumbleUri,
-} = require('./mumble-client');
+} = require('./client');
 
 function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));

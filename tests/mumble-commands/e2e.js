@@ -14,8 +14,8 @@ const {
     encodeMessage,
     ensureClientCertificate,
     mumbleHtmlToText,
-} = require('../../bot/mumble-client');
-const { createMumbleCommandBot, getMumbleBotConfig } = require('../../bot/mumble-commands');
+} = require('../../bot/mumble/client');
+const { createMumbleCommandBot, getMumbleBotConfig } = require('../../bot/mumble/commands');
 
 const HOST = process.env.MUMBLE_TEST_HOST || '127.0.0.1';
 const PORT = Number.parseInt(process.env.MUMBLE_TEST_PORT || '64738', 10);

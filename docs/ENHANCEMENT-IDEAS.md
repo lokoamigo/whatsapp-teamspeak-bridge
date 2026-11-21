@@ -6,7 +6,7 @@ each points to the code it would change.
 
 ## Top picks
 
-1. **Limit who can call in.** `autoAcceptIncomingCall` (`bot/bridge-bot.js`)
+1. **Limit who can call in.** `autoAcceptIncomingCall` (`bot/whatsapp/calls.js`)
    answers every incoming call, so anyone who calls the bridge number can listen
    to the TeamSpeak channel. Add a `BRIDGE_AUTO_ACCEPT_FROM` allowlist that takes
    numbers or contact groups, plus an option to answer only when someone is in
@@ -69,11 +69,10 @@ each points to the code it would change.
 
 ## Maintainability
 
-- Split `bot/bridge-bot.js` into modules: `teamspeak/`, `whatsapp/`, `api/` and
-  `audio/`. A voice-backend interface would make Mumble parity and future
+- ~~Split `bot/bridge-bot.js` into modules~~ (done: `whatsapp/`, `teamspeak/`,
+  `mumble/`, `audio/`, `api/`, with all env parsing in `bot/config.js`). Next
+  step: a voice-backend interface, which would make Mumble parity and future
   backends (Discord, a headless TS6 client) much easier.
-- Move the many `WHATSAPP_CALL_MIC_MENU_*` timing knobs into one config module
-  that validates its input.
 - The README is German-only. An English version would help outside
   contributors.
 
