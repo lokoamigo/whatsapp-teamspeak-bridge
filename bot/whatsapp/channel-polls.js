@@ -1,7 +1,8 @@
 'use strict';
 
 // `!switchChannel` from WhatsApp: direct switches and paged WhatsApp polls
-// listing TeamSpeak channels, plus resolving poll votes back to a channel.
+// listing voice channels (TeamSpeak or Mumble), plus resolving poll votes
+// back to a channel.
 
 const { Poll } = require('whatsapp-web.js');
 const {
@@ -9,6 +10,7 @@ const {
     SHOW_MORE_CHANNELS_OPTION,
     WHATSAPP_SWITCH_CHANNEL_COMMAND,
     WHATSAPP_SWITCH_CHANNEL_COMMAND_TYPO,
+    VOICE_BACKEND_LABEL,
 } = require('../config');
 const state = require('../state');
 const {
@@ -18,9 +20,9 @@ const {
     getVotePollIdAliases,
     getPollOptionNames,
 } = require('./message-ids');
-const { requireClientQuery, switchToChannelByName } = require('../teamspeak/channels');
+const { requireVoiceChannels, switchToChannelByName } = require('../voice-channels');
 
-const CHANNEL_POLL_TITLE = 'Switch TeamSpeak channel';
+const CHANNEL_POLL_TITLE = `Switch ${VOICE_BACKEND_LABEL} channel`;
 const CHANNEL_POLL_TTL_MS = 30 * 60 * 1000;
 
 function parseWhatsAppSwitchChannelCommand(body) {
@@ -80,7 +82,7 @@ function registerChannelPollIds(pollIds, pollState, pollMessage = null) {
     }
     pruneChannelPolls();
     console.log(
-        `Tracking TeamSpeak channel poll ${ids.join(',')} for chat=${pollState.chatId} page=${pollState.page}`,
+        `Tracking ${VOICE_BACKEND_LABEL} channel poll ${ids.join(',')} for chat=${pollState.chatId} page=${pollState.page}`,
     );
     return true;
 }
@@ -89,7 +91,7 @@ function queuePendingChannelPoll(pollState) {
     state.pendingChannelPolls.push(pollState);
     pruneChannelPolls();
     console.log(
-        `Waiting for outgoing TeamSpeak channel poll ID for chat=${pollState.chatId} page=${pollState.page}`,
+        `Waiting for outgoing ${VOICE_BACKEND_LABEL} channel poll ID for chat=${pollState.chatId} page=${pollState.page}`,
     );
 }
 
@@ -145,7 +147,7 @@ function handleWhatsAppMessageCreate(message) {
     const pollIds = getMessageIdAliases(message);
     const pollId = pollIds[0] || null;
     if (!pollId) {
-        console.error('Outgoing TeamSpeak channel poll still has no message ID.');
+        console.error(`Outgoing ${VOICE_BACKEND_LABEL} channel poll still has no message ID.`);
         return;
     }
 
@@ -171,10 +173,10 @@ async function sendChannelSwitchPoll(client, chatId, requestedBy, page = 0) {
         throw new Error('The configured whatsapp-web.js build does not expose Poll support.');
     }
 
-    const query = requireClientQuery();
-    const channels = await query.listSwitchableChannels();
+    const voiceChannels = requireVoiceChannels();
+    const channels = await voiceChannels.listSwitchableChannels();
     if (channels.length === 0) {
-        await client.sendMessage(chatId, 'No other TeamSpeak channels are available.');
+        await client.sendMessage(chatId, `No other ${VOICE_BACKEND_LABEL} channels are available.`);
         return;
     }
 
@@ -182,7 +184,7 @@ async function sendChannelSwitchPoll(client, chatId, requestedBy, page = 0) {
     const start = page * channelSlots;
     const pageChannels = channels.slice(start, start + channelSlots);
     if (pageChannels.length === 0) {
-        await client.sendMessage(chatId, 'No more TeamSpeak channels are available.');
+        await client.sendMessage(chatId, `No more ${VOICE_BACKEND_LABEL} channels are available.`);
         return;
     }
 
@@ -224,7 +226,7 @@ async function handleWhatsAppSwitchChannelCommand(client, message, command) {
     if (command.channelName) {
         try {
             const channel = await switchToChannelByName(command.channelName);
-            await message.reply(`Switched TeamSpeak channel to: ${channel.name}`);
+            await message.reply(`Switched ${VOICE_BACKEND_LABEL} channel to: ${channel.name}`);
         } catch (error) {
             await message.reply(`Error: ${error.message}`);
         }
@@ -249,7 +251,7 @@ async function handleWhatsAppPollVote(client, vote) {
     );
     if (!pollState) {
         console.log(
-            `Ignoring WhatsApp poll vote: no tracked TeamSpeak channel poll for ${pollId || 'unknown'}`,
+            `Ignoring WhatsApp poll vote: no tracked ${VOICE_BACKEND_LABEL} channel poll for ${pollId || 'unknown'}`,
         );
         return;
     }
@@ -369,24 +371,24 @@ async function processChannelPollSelection(client, pollState, selected, context)
     }
 
     deleteChannelPollState(pollState);
-    const query = requireClientQuery();
-    console.log(`Switching TeamSpeak channel by WhatsApp poll ${source} to ${channel.name} (${channel.id}).`);
+    const voiceChannels = requireVoiceChannels();
+    console.log(`Switching ${VOICE_BACKEND_LABEL} channel by WhatsApp poll ${source} to ${channel.name} (${channel.id}).`);
     try {
-        await query.moveSelfToChannel(channel);
+        await voiceChannels.moveToChannel(channel);
     } catch (error) {
         pollState.completed = false;
         console.error(
-            `Could not switch TeamSpeak channel to ${channel.name} (${channel.id}): ${error.message}`,
+            `Could not switch ${VOICE_BACKEND_LABEL} channel to ${channel.name} (${channel.id}): ${error.message}`,
         );
         await client.sendMessage(
             pollState.chatId,
-            `Error switching TeamSpeak channel: ${error.message}`,
+            `Error switching ${VOICE_BACKEND_LABEL} channel: ${error.message}`,
         );
         return;
     }
     await client.sendMessage(
         pollState.chatId,
-        `Switched TeamSpeak channel to: ${channel.name}`,
+        `Switched ${VOICE_BACKEND_LABEL} channel to: ${channel.name}`,
     );
 }
 

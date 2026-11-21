@@ -35,6 +35,7 @@ const MessageType = {
     UserState: 9,
     TextMessage: 11,
     PermissionDenied: 12,
+    ACL: 13,
 };
 
 // --- protobuf (proto2 subset: varint and length-delimited fields) -----------
@@ -595,10 +596,16 @@ class MumbleClient extends EventEmitter {
     }
 
     moveToChannel(channelId) {
+        this.moveUserToChannel(this.session, channelId);
+    }
+
+    // Moving another user needs the Move permission; the server answers with
+    // a UserState (success) or PermissionDenied.
+    moveUserToChannel(session, channelId) {
         this.sendLimited(
             MessageType.UserState,
-            encodeMessage([[1, this.session], [5, channelId]]),
-            'move',
+            encodeMessage([[1, session], [5, channelId]]),
+            `move:${session}`,
         );
     }
 

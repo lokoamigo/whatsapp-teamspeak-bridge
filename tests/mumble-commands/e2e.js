@@ -15,6 +15,7 @@ const {
     ensureClientCertificate,
     mumbleHtmlToText,
 } = require('../../bot/mumble/client');
+const { createMumbleChannelControl } = require('../../bot/mumble/channels');
 const { createMumbleCommandBot, getMumbleBotConfig } = require('../../bot/mumble/commands');
 
 const HOST = process.env.MUMBLE_TEST_HOST || '127.0.0.1';
@@ -185,6 +186,52 @@ async function main() {
         /^ok help/,
     );
     step('bot reconnects after being kicked and answers again');
+
+    // !switchChannel backend: the bot moves the bridge user (needs Move).
+    const channelControl = createMumbleChannelControl({
+        getClient: () => bot.client,
+        bridgeUsername: 'WhatsAppBridge',
+        botUsername: 'WhatsAppBridge-Bot',
+    });
+    const switchable = await channelControl.listSwitchableChannels();
+    assert.deepStrictEqual(
+        switchable.map((channel) => channel.name).sort(),
+        ['Bridge', 'Root'],
+    );
+    step('switchable channels exclude the bridge user\'s current channel');
+
+    const bridgeTarget = switchable.find((channel) => channel.name === 'Bridge');
+    await assert.rejects(channelControl.moveToChannel(bridgeTarget), /Move permission/);
+    assert.strictEqual(admin.findUserByName('WhatsAppBridge').channelId, otherChannel);
+    step('moving the bridge user without the Move permission is refused clearly');
+
+    // Grant Move (plus the usual defaults) to @all on the root channel.
+    const PERMISSIONS = 0x2 | 0x4 | 0x8 | 0x20 | 0x100 | 0x200;
+    admin.send(
+        MessageType.ACL,
+        encodeMessage([
+            [1, 0],
+            [2, true],
+            [4, encodeMessage([[1, true], [2, true], [5, 'all'], [6, PERMISSIONS], [7, 0]])],
+        ]),
+    );
+    let moveError = null;
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+        try {
+            await channelControl.moveToChannel(bridgeTarget);
+            moveError = null;
+            break;
+        } catch (error) {
+            moveError = error;
+            await new Promise((resolve) => setTimeout(resolve, 500));
+        }
+    }
+    if (moveError) throw moveError;
+    await waitFor('bridge user moved', () =>
+        admin.findUserByName('WhatsAppBridge').channelId === bridgeChannel,
+    );
+    await waitFor('bot follows the moved bridge user', () => botUser().channelId === bridgeChannel);
+    step('with Move permission the bridge user is moved and the bot follows');
 
     bot.stop();
     for (const client of [admin, commander, stranger, bridge]) client.close('done');

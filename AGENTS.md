@@ -41,8 +41,9 @@ keinen TeamSpeak-Client und benoetigen dessen Lizenzbestaetigung nicht.
 - `bot/config.js` / `bot/state.js`: Alle Umgebungsvariablen (einmalig geparst) und der gemeinsame Laufzeitzustand.
 - `bot/commands.js`: `!wa`-Befehlssatz, gemeinsam fuer TeamSpeak und Mumble. `bot/contacts.js`: Nummern-Normalisierung und Kontaktgruppen.
 - `bot/whatsapp/`: `client.js` (einziger Chromium-Besitzer, Event-Verdrahtung), `calls.js` (Anrufe, Auto-Accept), `microphone.js` (In-Call-Mikrofonwahl), `readiness.js`, `messages.js` (`!invite`), `channel-polls.js` + `poll-vote-hook.js` (`!switchChannel`).
-- `bot/teamspeak/`: `client-query.js` (ClientQuery-Verbindung), `protocol.js` (Escaping/Parsing), `channels.js`, `command-listener.js`.
-- `bot/mumble/`: Mumble-Protokoll-Client, Befehls-Bot und dessen Start.
+- `bot/voice-channels.js`: Backend-neutrale Kanalwahl fuer `!switchChannel`; das aktive Backend registriert seine Kanalsteuerung in `state.voiceChannels`.
+- `bot/teamspeak/`: `client-query.js` (ClientQuery-Verbindung), `protocol.js` (Escaping/Parsing), `channels.js` (Kanalsteuerung), `command-listener.js`.
+- `bot/mumble/`: Mumble-Protokoll-Client, Befehls-Bot, dessen Start und `channels.js` (verschiebt den Bridge-Nutzer; der Bot-Nutzer braucht die ACL-Berechtigung Move).
 - `bot/audio/pulse.js`, `bot/api/server.js`: PulseAudio-Helfer und lokale HTTP-API.
 - `rootfs/etc/pulse/bridge.pa`: Virtuelle PulseAudio-Geraete und Audio-Routen.
 - `rootfs/etc/supervisor/conf.d/bridge.conf`: Prozessliste fuer Supervisor.

@@ -98,9 +98,10 @@ Mumble-Aufnahme auf `wa_mic`. Bei manuell gewählten Geräten entsprechend
 gelten aus Kompatibilitätsgründen auch im Mumble-Modus.
 
 Mumble wird als Audio-Client verwendet. `!wa`-Textbefehle funktionieren über
-den Mumble-Chat (siehe [Steuerung per Mumble-Chat](#steuerung-per-mumble-chat));
-`!switchChannel` ist für Mumble nicht implementiert. `!invite` und die
-HTTP-Status-API bleiben verfügbar.
+den Mumble-Chat (siehe [Steuerung per Mumble-Chat](#steuerung-per-mumble-chat)).
+`!switchChannel`, `!invite` und die HTTP-Status-API bleiben verfügbar;
+`!switchChannel` benötigt im Mumble-Modus die Move-Berechtigung für den
+Bot-Nutzer (siehe unten).
 TeamSpeak, ClientQuery-Relay und ClientQuery-Watchdog bleiben im Mumble-Modus
 gestoppt; entsprechend ist Port `25640` dann ohne Funktion.
 
@@ -311,6 +312,17 @@ Mumble-Client beim ersten Verbinden vertraut und in
 verweigert der Bot die Verbindung und meldet das im Log. Nach einem
 beabsichtigten Zertifikatswechsel den Eintrag aus der Datei entfernen.
 
+`!switchChannel` aus WhatsApp verschiebt im Mumble-Modus den Bridge-Client
+(Nutzername aus `MUMBLE_URI`) über die Verbindung des Bot-Nutzers; der Bot folgt
+ihm anschließend. Dafür braucht der Bot-Nutzer auf dem Mumble-Server die
+ACL-Berechtigung **Move** im aktuellen und im Zielkanal, am einfachsten im
+Root-Kanal mit Vererbung auf Unterkanäle. Dazu als Server-Admin im
+Mumble-Client den Bot-Nutzer registrieren (Rechtsklick auf den Nutzer →
+Register) und unter **Edit → ACL** des Root-Kanals einen Eintrag für ihn mit
+*Move* anlegen. Ohne
+diese Berechtigung antwortet die Bridge in WhatsApp mit einem entsprechenden
+Fehler. `MUMBLE_URI` muss dafür einen Nutzernamen enthalten.
+
 Mumble-Server begrenzen Statusänderungen und Textnachrichten pro Nutzer
 (Standard: 1/s, Burst 5) und verwerfen Überzähliges kommentarlos. Der Bot hält
 sich daran, Antworten können deshalb kurz verzögert ankommen.
@@ -366,12 +378,13 @@ den laufenden Anruf ein. Ist kein Anruf aktiv, passiert nichts. In
 WhatsApp-Gruppenchats wird der tatsächliche Nachrichtensender eingeladen, nicht
 die Gruppe.
 
-`!switchChannel` erstellt eine WhatsApp-Umfrage mit den TeamSpeak-Kanälen außer
-dem aktuell aktiven Kanal des Bridge-Clients. Ist die Auswahl durch
+`!switchChannel` erstellt eine WhatsApp-Umfrage mit den Kanälen des
+Voice-Backends (TeamSpeak oder Mumble) außer dem aktuell aktiven Kanal des
+Bridge-Clients. Ist die Auswahl durch
 `BRIDGE_WHATSAPP_CHANNEL_POLL_MAX_OPTIONS` begrenzt, enthält die Umfrage als
 letzte Option `show more channels`; diese Auswahl erstellt die nächste
 Kanalseite. `!switchChannel <kanalname>` wechselt direkt in den exakt benannten
-TeamSpeak-Kanal. Die versehentliche Schreibweise `!switchCahnnel` wird ebenfalls
+Kanal. Die versehentliche Schreibweise `!switchCahnnel` wird ebenfalls
 akzeptiert.
 
 Poll-Antworten werden im Bot zusätzlich über einen lokalen WhatsApp-Web-Hook auf
