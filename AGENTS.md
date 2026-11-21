@@ -15,8 +15,8 @@ wie TeamSpeak. Mumble 1.3 speichert `Mumble.conf` nur beim sauberen
 Beenden; `start-mumble` faengt SIGTERM ab und beendet Mumble per Ctrl+Q. Fuer
 das Mumble-Programm in Supervisor deshalb `stopasgroup=false` beibehalten. Im Mumble-Modus bleiben TeamSpeak und ClientQuery-Dienste
 gestoppt. Die `!wa`-Befehle laufen dann ueber den Mumble-Chat:
-`bot/mumble-commands.js` verbindet einen eigenen, tauben Bot-Nutzer
-(`bot/mumble-client.js`, Mumble-TCP-Protokoll ohne Abhaengigkeiten) mit dem
+`bot/mumble/commands.js` verbindet einen eigenen, tauben Bot-Nutzer
+(`bot/mumble/client.js`, Mumble-TCP-Protokoll ohne Abhaengigkeiten) mit dem
 Server aus `MUMBLE_URI`/`MUMBLE_BOT_URI`. Bot-Zertifikat und gepinnte
 Server-Fingerprints liegen unter `/data/mumble/bridge-bot`. Tests:
 `npm test` (Unit) und `tests/mumble-commands/run.sh` (E2E gegen einen
@@ -37,7 +37,13 @@ keinen TeamSpeak-Client und benoetigen dessen Lizenzbestaetigung nicht.
 - `Dockerfile`: Multi-Stage-Build. `node-deps` installiert Node-Abhaengigkeiten; die Runtime enthaelt Node, Chromium, TeamSpeak, PulseAudio, Supervisor und noVNC, aber kein npm/git.
 - `docker-compose.yml`: Container-Konfiguration, persistentes Volume, noVNC-Port `6080`, ClientQuery-Relay-Port `25640`.
 - `Makefile`: Komfort-Targets fuer Compose. `make build` baut nur das Image; `make restart` baut und ersetzt den Container ohne Volume-Reset.
-- `bot/bridge-bot.js`: TeamSpeak-Textbefehle und WhatsApp-Web-Call-Automation.
+- `bot/bridge-bot.js`: Einstiegspunkt; startet WhatsApp-Client, HTTP-API und den TeamSpeak- bzw. Mumble-Befehlskanal.
+- `bot/config.js` / `bot/state.js`: Alle Umgebungsvariablen (einmalig geparst) und der gemeinsame Laufzeitzustand.
+- `bot/commands.js`: `!wa`-Befehlssatz, gemeinsam fuer TeamSpeak und Mumble. `bot/contacts.js`: Nummern-Normalisierung und Kontaktgruppen.
+- `bot/whatsapp/`: `client.js` (einziger Chromium-Besitzer, Event-Verdrahtung), `calls.js` (Anrufe, Auto-Accept), `microphone.js` (In-Call-Mikrofonwahl), `readiness.js`, `messages.js` (`!invite`), `channel-polls.js` + `poll-vote-hook.js` (`!switchChannel`).
+- `bot/teamspeak/`: `client-query.js` (ClientQuery-Verbindung), `protocol.js` (Escaping/Parsing), `channels.js`, `command-listener.js`.
+- `bot/mumble/`: Mumble-Protokoll-Client, Befehls-Bot und dessen Start.
+- `bot/audio/pulse.js`, `bot/api/server.js`: PulseAudio-Helfer und lokale HTTP-API.
 - `rootfs/etc/pulse/bridge.pa`: Virtuelle PulseAudio-Geraete und Audio-Routen.
 - `rootfs/etc/supervisor/conf.d/bridge.conf`: Prozessliste fuer Supervisor.
 - `rootfs/usr/local/bin/start-*`: Startskripte fuer die einzelnen Dienste.
@@ -84,7 +90,8 @@ Typische GUI-Einstellungen:
 Nach Codeaenderungen am Bot:
 
 ```bash
-node --check bot/bridge-bot.js
+for f in $(find bot -name '*.js'); do node --check "$f"; done
+npm test
 docker compose config
 make restart
 docker compose ps
