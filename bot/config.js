@@ -101,6 +101,13 @@ const AUTO_ACCEPT_POLL_MS = intFromEnv('BRIDGE_AUTO_ACCEPT_POLL_MS', 5000, {
     min: 1000,
 });
 
+// Generic join/leave messages for the WhatsApp call in the voice channel chat.
+const CALL_ANNOUNCEMENTS =
+    (process.env.BRIDGE_CALL_ANNOUNCEMENTS || 'true').trim().toLowerCase() === 'true';
+const CALL_ANNOUNCE_POLL_MS = intFromEnv('BRIDGE_CALL_ANNOUNCE_POLL_MS', 3000, {
+    min: 1000,
+});
+
 const COMMANDER_UIDS = new Set(listFromEnv('BRIDGE_COMMANDER_UIDS'));
 const CONTACT_GROUPS_JSON = process.env.BRIDGE_CONTACT_GROUPS || '{}';
 
@@ -142,6 +149,8 @@ module.exports = {
     CHANNEL_POLL_MAX_OPTIONS,
     SHOW_MORE_CHANNELS_OPTION,
     AUTO_ACCEPT_POLL_MS,
+    CALL_ANNOUNCEMENTS,
+    CALL_ANNOUNCE_POLL_MS,
     COMMANDER_UIDS,
     CONTACT_GROUPS_JSON,
 };

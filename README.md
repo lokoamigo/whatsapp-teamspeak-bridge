@@ -327,6 +327,30 @@ Mumble-Server begrenzen Statusänderungen und Textnachrichten pro Nutzer
 (Standard: 1/s, Burst 5) und verwerfen Überzähliges kommentarlos. Der Bot hält
 sich daran, Antworten können deshalb kurz verzögert ankommen.
 
+## Anruf-Hinweise im Voice-Kanal
+
+Die Bridge meldet im Chat ihres TeamSpeak- bzw. Mumble-Kanals, wenn ein
+WhatsApp-Anruf beginnt oder endet und wenn jemand beitritt oder ihn verlässt:
+
+```text
+📞 WhatsApp call started (1 on WhatsApp).
+📞 Someone joined the WhatsApp call (2 on WhatsApp).
+📞 Someone left the WhatsApp call (1 on WhatsApp).
+📞 WhatsApp call ended.
+```
+
+Die Hinweise enthalten bewusst weder Telefonnummern noch Kontaktnamen; die Zahl
+in Klammern zählt die WhatsApp-Teilnehmer ohne die Bridge. Der Bot fragt dafür
+alle `BRIDGE_CALL_ANNOUNCE_POLL_MS` (Standard `3000`) die Teilnehmerzahl ab und
+meldet eine Änderung erst, wenn sie zweimal hintereinander gleich gelesen wurde.
+Hinweise erscheinen daher wenige Sekunden verzögert. Mit
+`BRIDGE_CALL_ANNOUNCEMENTS=false` werden sie abgeschaltet.
+
+Im TeamSpeak-Modus schreibt der Bridge-Client selbst (ClientQuery-API-Key
+erforderlich), im Mumble-Modus der Bot-Nutzer. Im Mumble-Client der Bridge
+müssen Text-to-Speech und Ereignistöne deaktiviert sein (siehe oben), sonst
+würden die Hinweise in den WhatsApp-Anruf vorgelesen.
+
 ## HTTP-API
 
 Die Bridge stellt eine kleine versionierte JSON-API bereit, die standardmäßig

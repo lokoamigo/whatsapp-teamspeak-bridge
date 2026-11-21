@@ -176,6 +176,16 @@ class ClientQuery {
         );
     }
 
+    // targetmode=2 posts to the bridge client's current channel.
+    async sendChannelMessage(message) {
+        const ownInfo = await this.getOwnClientInfo();
+        const channelId = ownInfo.cid || ownInfo.client_channel_id;
+        if (!channelId) throw new Error('Could not determine the TeamSpeak channel.');
+        await this.command(
+            `sendtextmessage targetmode=2 target=${tsEscape(channelId)} msg=${tsEscape(message)}`,
+        );
+    }
+
     async getOwnClientInfo() {
         const lines = await this.command('whoami');
         const line = lines.find((entry) => !entry.startsWith('error ')) || '';

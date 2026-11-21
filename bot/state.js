@@ -15,7 +15,7 @@ const state = {
     awaitingQr: false,
     readyPoller: null,
     clientQuery: null,
-    // Channel control of the active voice backend, see voice-channels.js.
+    // Channel control and chat of the active voice backend, see voice-channels.js.
     voiceChannels: null,
     channelPolls: new Map(),
     pendingChannelPolls: [],

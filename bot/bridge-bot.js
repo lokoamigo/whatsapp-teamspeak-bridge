@@ -10,10 +10,11 @@
 //   audio/pulse.js         PulseAudio helpers
 //   api/server.js          local HTTP API
 
-const { VOICE_BACKEND } = require('./config');
+const { CALL_ANNOUNCEMENTS, VOICE_BACKEND } = require('./config');
 const { createApiServer } = require('./api/server');
 const { runMumbleCommandBot } = require('./mumble/command-listener');
 const { runTeamSpeakCommandListener } = require('./teamspeak/command-listener');
+const { startCallAnnouncements } = require('./whatsapp/call-announcements');
 const { createWhatsAppClient } = require('./whatsapp/client');
 
 // Errors Puppeteer raises when a WhatsApp Web navigation (e.g. the multi-step
@@ -52,6 +53,7 @@ process.on('unhandledRejection', (reason) => {
 async function main() {
     const waClient = await createWhatsAppClient();
     createApiServer(waClient);
+    if (CALL_ANNOUNCEMENTS) startCallAnnouncements(waClient);
 
     if (VOICE_BACKEND === 'mumble') {
         await runMumbleCommandBot(waClient);
