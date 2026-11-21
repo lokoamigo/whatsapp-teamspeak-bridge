@@ -27,20 +27,23 @@ fi
 # so on stop: close open dialogs, then trigger Mumble's own "Quit" (Ctrl+Q,
 # which also skips the "close or minimize?" prompt while connected).
 stopping=
+mumble_pid=
 quit_mumble() {
   stopping=1
+  [[ -n "$mumble_pid" ]] || return 0
   local deadline=$((SECONDS + ${MUMBLE_QUIT_TIMEOUT:-8})) windows main dialog
   while kill -0 "$mumble_pid" 2>/dev/null && (( SECONDS < deadline )); do
-    windows="$(wmctrl -lp 2>/dev/null | awk -v pid="$mumble_pid" '$3 == pid')" || windows=
+    # X calls are time-limited: without a window manager --sync would wait forever.
+    windows="$(timeout 2 wmctrl -lp 2>/dev/null | awk -v pid="$mumble_pid" '$3 == pid')" || windows=
     # wmctrl -lp: id, desktop, pid, host, title. (mawk has no {n} regex intervals.)
     main="$(awk '{ title = $0; for (i = 0; i < 4; i++) sub(/^[^ ]+ +/, "", title) }
                  title ~ /^Mumble( - Minimal View)? -- / { print $1; exit }' <<<"$windows")"
     dialog="$(awk -v main="$main" '$1 != main { id = $1 } END { print id }' <<<"$windows")"
     if [[ -n "$dialog" ]]; then
-      wmctrl -ic "$dialog" 2>/dev/null || true
+      timeout 2 wmctrl -ic "$dialog" 2>/dev/null || true
       sleep 0.5
     elif [[ -n "$main" ]]; then
-      xdotool windowactivate --sync "$main" key --clearmodifiers ctrl+q 2>/dev/null || true
+      timeout 2 xdotool windowactivate --sync "$main" key --clearmodifiers ctrl+q 2>/dev/null || true
       sleep 1
     else
       sleep 0.2
@@ -52,9 +55,11 @@ quit_mumble() {
   fi
 }
 
+# Trap before starting Mumble so an early stop request cannot orphan it.
+trap quit_mumble TERM INT
 /usr/bin/mumble "${args[@]}" &
 mumble_pid=$!
-trap quit_mumble TERM INT
+[[ -z "$stopping" ]] || quit_mumble
 status=0
 wait "$mumble_pid" || status=$?
 if [[ -n "$stopping" ]]; then
