@@ -21,6 +21,8 @@ const MAX_PACKET_BYTES = 8 * 1024 * 1024;
 // one in reserve for timing jitter.
 const RATE_LIMIT_PER_SECOND = 1;
 const RATE_LIMIT_BURST = 4;
+const MAX_QUEUED_MESSAGES = 128;
+const MAX_QUEUED_BYTES = 256 * 1024;
 
 const MessageType = {
     Version: 0,
@@ -317,6 +319,7 @@ class MumbleClient extends EventEmitter {
                 settled = true;
                 clearTimeout(timer);
                 this.off('synced', onSynced);
+                this.off('closed', onClosed);
                 if (error) {
                     this.close(error.message);
                     reject(error);
@@ -325,12 +328,13 @@ class MumbleClient extends EventEmitter {
                 }
             };
             const onSynced = () => finish();
+            const onClosed = (reason) => finish(new Error(reason || 'Mumble connection closed.'));
             const timer = setTimeout(
                 () => finish(new Error(`Timed out connecting to Mumble server ${host}:${port}.`)),
                 this.options.connectTimeoutMs || CONNECT_TIMEOUT_MS,
             );
             this.on('synced', onSynced);
-            this.closed.then((reason) => finish(new Error(reason || 'Mumble connection closed.')));
+            this.once('closed', onClosed);
 
             const socket = tls.connect({
                 host,
@@ -409,8 +413,16 @@ class MumbleClient extends EventEmitter {
     // and silently drops what exceeds it. Mirror it with some headroom and
     // queue instead. A queued message with the same key is replaced.
     sendLimited(type, payload, key = null) {
+        if (this.closeReason) return false;
         const { queue } = this.limited;
         const index = key === null ? -1 : queue.findIndex((item) => item.key === key);
+        const bytes = queue.reduce((total, item) => total + item.payload.length, 0)
+            - (index >= 0 ? queue[index].payload.length : 0) + payload.length;
+        if ((index < 0 && queue.length >= MAX_QUEUED_MESSAGES) || bytes > MAX_QUEUED_BYTES) {
+            // Reconnect instead of retaining an unbounded backlog under load.
+            this.close('Mumble outbound queue limit exceeded; reconnecting.');
+            return false;
+        }
         if (index >= 0) queue[index] = { type, payload, key };
         else queue.push({ type, payload, key });
         this.flushLimited();
@@ -447,7 +459,10 @@ class MumbleClient extends EventEmitter {
     }
 
     close(reason) {
-        if (!this.closeReason) this.closeReason = reason || 'Mumble connection closed.';
+        if (this.closeReason) return;
+        this.closeReason = reason || 'Mumble connection closed.';
+        this.synced = false;
+        this.buffer = Buffer.alloc(0);
         clearInterval(this.pingTimer);
         this.pingTimer = null;
         clearTimeout(this.limited.timer);
@@ -455,6 +470,7 @@ class MumbleClient extends EventEmitter {
         this.limited.queue = [];
         if (this.socket && !this.socket.destroyed) this.socket.destroy();
         this.resolveClosed(this.closeReason);
+        this.emit('closed', this.closeReason);
     }
 
     onData(chunk) {

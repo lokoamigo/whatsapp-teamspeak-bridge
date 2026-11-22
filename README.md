@@ -606,6 +606,28 @@ Audio-Router und die Anwendungs-Warteskripte beim parallelen Start keinen zweite
 PulseAudio-Daemon erzeugen. Veraltete Runtime-Sockets werden vor dem Start des
 verwalteten PulseAudio-Prozesses entfernt.
 
+Der Audio-Router läuft im vorhandenen Node-Bot und reagiert auf
+`pactl subscribe`-Ereignisse. Er verschiebt nur falsch zugeordnete Streams;
+bereits korrekte Standardgeräte bleiben unverändert. Ein Reparatur-Check alle
+30 Sekunden stellt fehlende virtuelle Geräte und verlorene Zuordnungen wieder
+her. Nach einem PulseAudio-Neustart verbindet sich der Router erneut. Der
+Mikrofon-Nudge bleibt einmal pro neuem Chromium-Aufnahmestream erhalten.
+Ein separater Supervisor-Dienst `audio-router` entfällt; Router-Fehler stehen
+im Log von `bridge-bot`.
+
+Langsame Bereitschafts- und Auto-Accept-Abfragen überlappen sich nicht mehr.
+Der Bot merkt sich höchstens 256 angenommene Call-IDs und 100 Kanal-Polls;
+abgelaufene Polls werden auch ohne neue Nachrichten regelmäßig entfernt.
+Die Mumble-Sendewarteschlange ist auf 128 Nachrichten beziehungsweise 256 KiB
+begrenzt. Bei Überlast verbindet sich der Befehls-Bot neu, statt unbegrenzt
+Nachrichten zu sammeln. Noch nicht gesendete Nachrichten werden dabei verworfen.
+
+Regressionstests: `npm test`. Für den Audio-Router zusätzlich nach einem
+Image-Build `bash tests/audio-routing/run.sh` ausführen. Der Test verwendet
+einen isolierten Container ohne Netzwerk und ohne persistentes Profil und
+prüft Routing, Mikrofon-Nudge, Gerätereparatur und PulseAudio-Neustart.
+Mit `BRIDGE_TEST_IMAGE` lässt sich ein anderes kompatibles Bridge-Image wählen.
+
 Nach dem Aktualisieren der Dateien ist ein Image-Neubau erforderlich:
 
 ```bash

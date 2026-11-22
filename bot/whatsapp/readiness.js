@@ -5,6 +5,9 @@
 
 const { ClientInfo } = require('whatsapp-web.js');
 const state = require('../state');
+const { startSerialInterval } = require('../util');
+
+const readyRefreshes = new WeakMap();
 
 async function inspectWhatsAppRuntime(client) {
     if (!client.pupPage || client.pupPage.isClosed()) {
@@ -63,7 +66,14 @@ async function inspectWhatsAppRuntime(client) {
     });
 }
 
-async function refreshWhatsAppReady(client) {
+function refreshWhatsAppReady(client) {
+    if (readyRefreshes.has(client)) return readyRefreshes.get(client);
+    const refresh = updateWhatsAppReady(client).finally(() => readyRefreshes.delete(client));
+    readyRefreshes.set(client, refresh);
+    return refresh;
+}
+
+async function updateWhatsAppReady(client) {
     const runtime = await inspectWhatsAppRuntime(client);
 
     state.whatsapp = runtime;
@@ -98,17 +108,16 @@ async function refreshWhatsAppReady(client) {
 
 function startReadyPoller(client) {
     if (state.readyPoller) return;
-    state.readyPoller = setInterval(() => {
+    state.readyPoller = startSerialInterval(async () => {
         if (state.ready) {
             clearInterval(state.readyPoller);
             state.readyPoller = null;
             return;
         }
-        refreshWhatsAppReady(client).catch((error) => {
-            console.error(`WhatsApp Web.js ready refresh failed: ${error.message}`);
-        });
-    }, 5000);
-    state.readyPoller.unref();
+        await refreshWhatsAppReady(client);
+    }, 5000, (error) => {
+        console.error(`WhatsApp Web.js ready refresh failed: ${error.message}`);
+    });
 }
 
 function whatsappStatusText() {

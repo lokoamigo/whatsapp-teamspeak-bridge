@@ -4,6 +4,20 @@ function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// Slow browser or socket requests must not accumulate on interval ticks.
+function startSerialInterval(task, intervalMs, onError) {
+    let running = false;
+    const timer = setInterval(() => {
+        if (running) return;
+        running = true;
+        Promise.resolve().then(task).catch(onError).finally(() => {
+            running = false;
+        });
+    }, intervalMs);
+    timer.unref();
+    return timer;
+}
+
 function parseArgs(input) {
     const args = [];
     const regex = /"([^"\\]*(?:\\.[^"\\]*)*)"|'([^'\\]*(?:\\.[^'\\]*)*)'|(\S+)/g;
@@ -14,4 +28,4 @@ function parseArgs(input) {
     return args;
 }
 
-module.exports = { sleep, parseArgs };
+module.exports = { sleep, parseArgs, startSerialInterval };

@@ -44,6 +44,7 @@ keinen TeamSpeak-Client und benoetigen dessen Lizenzbestaetigung nicht.
 - `bot/voice-channels.js`: Backend-neutrale Kanalwahl fuer `!switchChannel`; das aktive Backend registriert seine Kanalsteuerung in `state.voiceChannels`.
 - `bot/teamspeak/`: `client-query.js` (ClientQuery-Verbindung), `protocol.js` (Escaping/Parsing), `channels.js` (Kanalsteuerung), `command-listener.js`.
 - `bot/mumble/`: Mumble-Protokoll-Client, Befehls-Bot, dessen Start und `channels.js` (verschiebt den Bridge-Nutzer; der Bot-Nutzer braucht die ACL-Berechtigung Move).
+- `bot/audio/router.js`: Ereignisgesteuertes Audio-Routing im vorhandenen Node-Prozess (`pactl subscribe`, langsamer Reparatur-Check). Kein eigener Supervisor-Dienst.
 - `bot/audio/pulse.js`, `bot/api/server.js`: PulseAudio-Helfer und lokale HTTP-API.
 - `rootfs/etc/pulse/bridge.pa`: Virtuelle PulseAudio-Geraete und Audio-Routen.
 - `rootfs/etc/supervisor/conf.d/bridge.conf`: Prozessliste fuer Supervisor.

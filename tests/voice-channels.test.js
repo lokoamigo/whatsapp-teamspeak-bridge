@@ -73,6 +73,7 @@ test('Mumble move targets the bridge user and resolves on server confirmation', 
     await control(mumble).moveToChannel({ id: 2, name: 'Lobby' });
     assert.deepStrictEqual(mumble.moves, [[10, 2]]);
     assert.strictEqual(mumble.users.get(10).channelId, 2);
+    assert.strictEqual(mumble.listenerCount('closed'), 0, 'successful moves release close listeners');
 });
 
 test('Mumble move denial explains the missing Move permission', async () => {
@@ -84,6 +85,15 @@ test('Mumble move denial explains the missing Move permission', async () => {
         /denied moving the bridge to Lobby.*"WhatsAppBridge-Bot".*Move permission/,
     );
     assert.strictEqual(mumble.listenerCount('userState'), 0, 'listeners are removed');
+    assert.strictEqual(mumble.listenerCount('closed'), 0);
+});
+
+test('Mumble move rejects on disconnect and removes all move listeners', async () => {
+    const mumble = createFakeMumble((fake) => fake.emit('closed', 'connection lost'));
+    await assert.rejects(control(mumble).moveToChannel({ id: 2, name: 'Lobby' }), /connection lost/);
+    for (const event of ['userState', 'permissionDenied', 'closed']) {
+        assert.strictEqual(mumble.listenerCount(event), 0);
+    }
 });
 
 test('Mumble move times out without a server answer', async () => {

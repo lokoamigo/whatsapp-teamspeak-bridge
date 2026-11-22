@@ -13,6 +13,7 @@ const {
     VOICE_BACKEND_LABEL,
 } = require('../config');
 const state = require('../state');
+const { RecentSet } = require('../recent-set');
 const {
     getMessageIdAliases,
     getMessageSenderId,
@@ -24,6 +25,15 @@ const { requireVoiceChannels, switchToChannelByName } = require('../voice-channe
 
 const CHANNEL_POLL_TITLE = `Switch ${VOICE_BACKEND_LABEL} channel`;
 const CHANNEL_POLL_TTL_MS = 30 * 60 * 1000;
+const MAX_CHANNEL_POLLS = 100;
+let cleanupTimer = null;
+
+function startChannelPollCleanup() {
+    if (!cleanupTimer) {
+        cleanupTimer = setInterval(pruneChannelPolls, 60000);
+        cleanupTimer.unref();
+    }
+}
 
 function parseWhatsAppSwitchChannelCommand(body) {
     const trimmed = String(body || '').trim();
@@ -70,13 +80,12 @@ function buildChannelPollState(chatId, requestedBy, page, pageChannels, hasMore,
     };
 }
 
-function registerChannelPollIds(pollIds, pollState, pollMessage = null) {
+function registerChannelPollIds(pollIds, pollState) {
     const ids = Array.from(new Set((pollIds || []).filter(Boolean)));
     if (ids.length === 0) return false;
     pollState.pollIds = Array.from(
         new Set([...(pollState.pollIds || []), ...ids]),
     );
-    if (pollMessage) pollState.pollMessage = pollMessage;
     for (const pollId of ids) {
         state.channelPolls.set(pollId, pollState);
     }
@@ -136,6 +145,13 @@ function pruneChannelPolls() {
     state.pendingChannelPolls = state.pendingChannelPolls.filter(
         (pollState) => pollState.createdAt >= expiresBefore,
     );
+    const tracked = [...new Set([
+        ...state.channelPolls.values(), ...state.pendingChannelPolls,
+    ])].sort((left, right) => left.createdAt - right.createdAt);
+    for (const pollState of tracked.slice(0, Math.max(0, tracked.length - MAX_CHANNEL_POLLS))) {
+        deleteChannelPollState(pollState);
+        removePendingChannelPoll(pollState);
+    }
 }
 
 // Outgoing poll messages sometimes only receive their ID via message_create;
@@ -165,7 +181,7 @@ function handleWhatsAppMessageCreate(message) {
     if (pendingIndex === -1) return;
 
     const [pollState] = state.pendingChannelPolls.splice(pendingIndex, 1);
-    registerChannelPollIds(pollIds, pollState, message);
+    registerChannelPollIds(pollIds, pollState);
 }
 
 async function sendChannelSwitchPoll(client, chatId, requestedBy, page = 0) {
@@ -210,7 +226,7 @@ async function sendChannelSwitchPoll(client, chatId, requestedBy, page = 0) {
     queuePendingChannelPoll(pollState);
     const sentMessage = await client.sendMessage(chatId, poll);
     const pollIds = getMessageIdAliases(sentMessage);
-    if (registerChannelPollIds(pollIds, pollState, sentMessage)) {
+    if (registerChannelPollIds(pollIds, pollState)) {
         removePendingChannelPoll(pollState);
         return;
     }
@@ -306,7 +322,7 @@ async function handleWhatsAppPollVoteBulkUpsert(client, event) {
     }
 
     const voteKey = `${event.voter || 'unknown'}:${parentKeys.join(',')}:${selectedIds.join(',')}`;
-    if (!pollState.seenVoteKeys) pollState.seenVoteKeys = new Set();
+    if (!pollState.seenVoteKeys) pollState.seenVoteKeys = new RecentSet(256);
     if (pollState.seenVoteKeys.has(voteKey)) return;
     pollState.seenVoteKeys.add(voteKey);
 
@@ -393,6 +409,7 @@ async function processChannelPollSelection(client, pollState, selected, context)
 }
 
 module.exports = {
+    startChannelPollCleanup,
     parseWhatsAppSwitchChannelCommand,
     handleWhatsAppSwitchChannelCommand,
     handleWhatsAppMessageCreate,

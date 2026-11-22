@@ -1,5 +1,7 @@
 'use strict';
 
+const { RecentSet } = require('./recent-set');
+
 // Mutable runtime state shared by the WhatsApp, TeamSpeak and API modules.
 // Modules mutate properties on this single object; never reassign the export.
 const state = {
@@ -10,7 +12,7 @@ const state = {
     activeCall: null,
     micStabilizationRunId: 0,
     autoAcceptingCallIds: new Set(),
-    autoAcceptedCallIds: new Set(),
+    autoAcceptedCallIds: new RecentSet(256),
     lastAutoAcceptPollErrorAt: 0,
     awaitingQr: false,
     readyPoller: null,

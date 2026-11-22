@@ -12,6 +12,7 @@
 
 const { CALL_ANNOUNCEMENTS, VOICE_BACKEND } = require('./config');
 const { createApiServer } = require('./api/server');
+const { startAudioRouter } = require('./audio/router');
 const { runMumbleCommandBot } = require('./mumble/command-listener');
 const { runTeamSpeakCommandListener } = require('./teamspeak/command-listener');
 const { startCallAnnouncements } = require('./whatsapp/call-announcements');
@@ -51,6 +52,7 @@ process.on('unhandledRejection', (reason) => {
 });
 
 async function main() {
+    startAudioRouter();
     const waClient = await createWhatsAppClient();
     createApiServer(waClient);
     if (CALL_ANNOUNCEMENTS) startCallAnnouncements(waClient);

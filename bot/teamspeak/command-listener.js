@@ -5,7 +5,7 @@
 
 const { TS_API_KEY } = require('../config');
 const state = require('../state');
-const { parseArgs, sleep } = require('../util');
+const { parseArgs, sleep, startSerialInterval } = require('../util');
 const { assertCommander, extractCommand, handleCommand } = require('../commands');
 const { teamSpeakChannels } = require('./channels');
 const { ClientQuery } = require('./client-query');
@@ -19,8 +19,9 @@ async function runTeamSpeakCommandListener(waClient) {
     }
 
     while (true) {
+        const query = new ClientQuery();
+        let heartbeat;
         try {
-            const query = new ClientQuery();
             await query.connect();
             state.clientQuery = query;
 
@@ -44,24 +45,23 @@ async function runTeamSpeakCommandListener(waClient) {
                 }
             };
 
-            while (true) {
-                const closed = await Promise.race([
-                    query.closed.then(() => 'closed'),
-                    sleep(5000).then(() => 'poll'),
-                ]);
-                if (closed === 'closed') break;
-
-                try {
-                    await query.refreshServerHandlerRegistration();
-                } catch (error) {
+            heartbeat = startSerialInterval(
+                () => query.refreshServerHandlerRegistration(),
+                5000,
+                (error) => {
                     console.error(`ClientQuery server handler not ready: ${error.message}`);
-                }
-            }
+                },
+            );
+            // Subscribe once for this connection. Repeated Promise.race calls
+            // retain their losing callbacks until the connection finally closes.
+            await query.closed;
             console.error('ClientQuery command listener disconnected; reconnecting.');
-            if (state.clientQuery === query) state.clientQuery = null;
         } catch (error) {
             console.error(`ClientQuery command listener not ready: ${error.message}`);
-            state.clientQuery = null;
+        } finally {
+            clearInterval(heartbeat);
+            query.socket?.destroy();
+            if (state.clientQuery === query) state.clientQuery = null;
         }
         await sleep(5000);
     }

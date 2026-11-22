@@ -13,10 +13,12 @@ const {
     FORCE_WEB_CALLING,
 } = require('../config');
 const state = require('../state');
+const { startSerialInterval } = require('../util');
 const { autoAcceptIncomingCall, pollIncomingWhatsAppCall } = require('./calls');
 const {
     handleWhatsAppMessageCreate,
     handleWhatsAppPollVote,
+    startChannelPollCleanup,
 } = require('./channel-polls');
 const { handleWhatsAppMessage } = require('./messages');
 const { grantWhatsAppMicrophonePermission } = require('./microphone');
@@ -24,6 +26,7 @@ const { attachWhatsAppPollVoteBridge } = require('./poll-vote-hook');
 const { refreshWhatsAppReady, startReadyPoller } = require('./readiness');
 
 async function createWhatsAppClient() {
+    startChannelPollCleanup();
     const client = new Client({
         authStrategy: new NoAuth(),
         forceWebCalling: FORCE_WEB_CALLING,
@@ -166,16 +169,17 @@ async function createWhatsAppClient() {
     });
     startReadyPoller(client);
 
-    const autoAcceptPoller = setInterval(() => {
-        pollIncomingWhatsAppCall(client).catch((error) => {
+    startSerialInterval(
+        () => pollIncomingWhatsAppCall(client),
+        AUTO_ACCEPT_POLL_MS,
+        (error) => {
             const now = Date.now();
             if (now - state.lastAutoAcceptPollErrorAt > 30000) {
                 console.error(`WhatsApp auto-accept poll failed: ${error.message}`);
                 state.lastAutoAcceptPollErrorAt = now;
             }
-        });
-    }, AUTO_ACCEPT_POLL_MS);
-    autoAcceptPoller.unref();
+        },
+    );
 
     return client;
 }

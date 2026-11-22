@@ -44,6 +44,7 @@ function waitForUserMove(mumble, session, channelId, { channelName, botUsername,
             clearTimeout(timer);
             mumble.off('userState', onUserState);
             mumble.off('permissionDenied', onPermissionDenied);
+            mumble.off('closed', onClosed);
             if (error) reject(error);
             else resolve();
         };
@@ -55,6 +56,7 @@ function waitForUserMove(mumble, session, channelId, { channelName, botUsername,
                 finish(new Error(describeMoveDenial(denied, channelName, botUsername)));
             }
         };
+        const onClosed = (reason) => finish(new Error(reason || 'Mumble connection closed.'));
         const timer = setTimeout(
             () =>
                 finish(
@@ -64,7 +66,7 @@ function waitForUserMove(mumble, session, channelId, { channelName, botUsername,
         );
         mumble.on('userState', onUserState);
         mumble.on('permissionDenied', onPermissionDenied);
-        mumble.closed.then((reason) => finish(new Error(reason || 'Mumble connection closed.')));
+        mumble.once('closed', onClosed);
     });
 }
 

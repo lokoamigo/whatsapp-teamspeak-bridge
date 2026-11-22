@@ -7,6 +7,7 @@ const path = require('path');
 const test = require('node:test');
 const {
     createTofuVerifier,
+    MumbleClient,
     decodeMessage,
     encodeMessage,
     getRepeatedUint,
@@ -15,6 +16,31 @@ const {
     textToMumbleHtml,
 } = require('../bot/mumble/client');
 const { getMumbleBotConfig } = require('../bot/mumble/commands');
+
+test('Mumble queue stays bounded and reconnects on message or byte overflow', async () => {
+    const client = new MumbleClient({});
+    client.limited.level = 100;
+    try {
+        for (let i = 0; i < 128; i++) {
+            assert.strictEqual(client.sendLimited(11, Buffer.from('x'), `key:${i}`), true);
+        }
+        assert.strictEqual(client.sendLimited(11, Buffer.from('replacement'), 'key:0'), true);
+        assert.strictEqual(client.limited.queue.length, 128);
+        let closed = 0;
+        client.on('closed', () => { closed += 1; });
+        assert.strictEqual(client.sendLimited(11, Buffer.from('overflow')), false);
+        assert.match(await client.closed, /queue limit exceeded/);
+        assert.strictEqual(client.limited.queue.length, 0);
+        assert.strictEqual(client.sendLimited(11, Buffer.from('after closing')), false);
+        client.close('again');
+        assert.strictEqual(closed, 1);
+    } finally {
+        client.close();
+    }
+    const large = new MumbleClient({});
+    assert.strictEqual(large.sendLimited(11, Buffer.alloc(256 * 1024 + 1)), false);
+    assert.match(await large.closed, /queue limit exceeded/);
+});
 
 test('protobuf round trip keeps varints, strings and repeated fields', () => {
     const buffer = encodeMessage([
