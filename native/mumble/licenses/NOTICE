@@ -1,0 +1,12 @@
+mumble-client-protocol
+Copyright (c) 2026 The mumble-client-protocol authors
+Licensed under MIT OR Apache-2.0 (see LICENSE-MIT and LICENSE-APACHE).
+
+This crate contains material from Mumble (https://www.mumble.info/),
+Copyright 2005-2023 The Mumble Developers, under the BSD-3-Clause licence.
+The full licence text is in proto/LICENSE.mumble.
+
+- proto/Mumble.proto and proto/MumbleUDP.proto: the Mumble protocol
+  definitions, vendored with their original copyright headers.
+- src/voice/crypt.rs: the OCB2-AES128 voice crypto, ported from Mumble's
+  src/crypto/CryptStateOCB2.cpp, with test cases from Mumble's TestCrypt.

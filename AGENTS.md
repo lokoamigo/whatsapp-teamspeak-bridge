@@ -9,12 +9,22 @@ Dieses Projekt baut einen einzelnen Docker-Container als WhatsApp-Web-zu-TeamSpe
 Der Node-Bot in `bot/bridge-bot.js` ist der Besitzer der sichtbaren Chromium-Instanz. Keine zweite Selenium-, ChromeDriver- oder parallele Browsersteuerung einfuehren.
 
 `BRIDGE_VOICE_BACKEND=mumble` waehlt alternativ den Mumble-Client statt TeamSpeak.
+`BRIDGE_MUMBLE_CLIENT=native` ersetzt die GUI und den separaten Bot durch
+`native/mumble` (Rust, eine Audio-/Chat-Verbindung). Standard bleibt `gui`.
+Der native Client importiert die vorhandene GUI-Identitaet unveraendert nach
+`/data/mumble/native`; bei Migrationsfehlern keine Ersatzidentitaet erzeugen.
+Node verwendet dann `bot/mumble/native.js` und einen privaten Unix-Socket.
+`bot/mumble/command-handler.js` ist der gemeinsame Befehlspfad beider Modi.
+Native Tests: Rust-Builder-Stage und `bash tests/mumble-native/run.sh`, siehe
+`native/mumble/README.md`. Kanalwechsel erfolgen im nativen Modus als eigener
+Nutzer mit Enter/Traverse statt als zweiter Bot mit Move. `MUMBLE_BOT_URI`
+wird nur im GUI-Modus verwendet. Diagnose: `bridge-mumble --status`.
 `MUMBLE_URI` steuert dessen Auto-Connect; das persistente Profil liegt unter
 `/data/mumble`. Mumble nutzt dieselben PulseAudio-Geraete (`ts_out`/`wa_mic`)
 wie TeamSpeak. Mumble 1.3 speichert `Mumble.conf` nur beim sauberen
 Beenden; `start-mumble` faengt SIGTERM ab und beendet Mumble per Ctrl+Q. Fuer
 das Mumble-Programm in Supervisor deshalb `stopasgroup=false` beibehalten. Im Mumble-Modus bleiben TeamSpeak und ClientQuery-Dienste
-gestoppt. Die `!wa`-Befehle laufen dann ueber den Mumble-Chat:
+gestoppt. Die `!wa`-Befehle laufen dann ueber den Mumble-Chat. Im GUI-Modus:
 `bot/mumble/commands.js` verbindet einen eigenen, tauben Bot-Nutzer
 (`bot/mumble/client.js`, Mumble-TCP-Protokoll ohne Abhaengigkeiten) mit dem
 Server aus `MUMBLE_URI`/`MUMBLE_BOT_URI`. Bot-Zertifikat und gepinnte

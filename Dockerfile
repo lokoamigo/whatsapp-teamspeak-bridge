@@ -1,3 +1,22 @@
+FROM rust:1.93-bookworm AS mumble-native-build
+
+RUN rustup component add rustfmt clippy
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      libopus-dev libpulse-dev pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /build
+COPY native/mumble/Cargo.toml native/mumble/Cargo.lock ./
+COPY native/mumble/src ./src
+COPY native/mumble/licenses ./licenses/project
+ENV CARGO_NET_GIT_FETCH_WITH_CLI=true
+RUN cargo fmt -- --check \
+    && cargo test --locked \
+    && cargo clippy --locked -- -D warnings \
+    && cargo build --release --locked \
+    && find /usr/local/cargo/registry/src /usr/local/cargo/git/checkouts \
+      -type f \( -iname 'LICENSE*' -o -iname 'NOTICE*' -o -iname 'COPYING*' \) \
+      -exec cp --parents {} /build/licenses/ \;
+
 FROM debian:12-slim AS node-deps
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -47,7 +66,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       libxrandr2 libxrender1 libxtst6 libxcb-keysyms1 libxcb-image0 \
       libxcb-render-util0 libxcb-icccm4 libxcb-xinerama0 libxcb-xkb1 \
       libxcb-util1 libpulse0 libopengl0 libgl1 libunwind8 libpci3 \
-      libxslt1.1 libatomic1 \
+      libxslt1.1 libatomic1 libopus0 \
     && rm -rf /var/lib/apt/lists/*
 
 # TeamSpeak 3 wird von der offiziellen Download-Domain geladen. Das Build-Argument
@@ -95,6 +114,8 @@ RUN useradd --create-home --uid 1000 --shell /bin/bash bridge \
 WORKDIR /opt/whatsapp-teamspeak-bridge
 COPY package.json package-lock.json ./
 COPY --from=node-deps /opt/whatsapp-teamspeak-bridge/node_modules ./node_modules
+COPY --from=mumble-native-build /build/target/release/bridge-mumble /usr/local/bin/bridge-mumble
+COPY --from=mumble-native-build /build/licenses /usr/share/doc/bridge-mumble
 COPY bot/ ./bot/
 COPY rootfs/ /
 RUN chmod +x /usr/local/bin/*
@@ -106,6 +127,9 @@ EXPOSE 6080 25640
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=45s --retries=3 \
   CMD curl -fsS http://127.0.0.1:6080/vnc.html >/dev/null \
-   && curl -fsS http://127.0.0.1:9222/json/version >/dev/null || exit 1
+   && curl -fsS http://127.0.0.1:9222/json/version >/dev/null \
+   && { test "$BRIDGE_VOICE_BACKEND" != mumble \
+        || test "${BRIDGE_MUMBLE_CLIENT:-gui}" != native \
+        || /usr/local/bin/bridge-mumble --status >/dev/null; } || exit 1
 
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/container-entrypoint"]

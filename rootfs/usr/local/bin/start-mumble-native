@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${BRIDGE_VOICE_BACKEND:-teamspeak}" != mumble || "${BRIDGE_MUMBLE_CLIENT:-gui}" != native ]]; then
+  echo >&2 'The native Mumble client requires BRIDGE_VOICE_BACKEND=mumble and BRIDGE_MUMBLE_CLIENT=native.'
+  exit 1
+fi
+/usr/local/bin/wait-for-audio
+exec /usr/local/bin/bridge-mumble

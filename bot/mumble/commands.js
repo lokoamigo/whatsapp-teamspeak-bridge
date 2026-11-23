@@ -8,9 +8,9 @@ const {
     MumbleClient,
     createTofuVerifier,
     ensureClientCertificate,
-    mumbleHtmlToText,
     parseMumbleUri,
 } = require('./client');
+const { createMumbleCommandHandler } = require('./command-handler');
 
 function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
@@ -47,50 +47,15 @@ function createMumbleCommandBot(options) {
         log = console,
     } = options;
 
-    // Commander entries are Mumble certificate hashes (SHA-1 hex).
-    const commanders = [...commanderIds].map((value) => String(value).trim().toLowerCase());
-
-    function assertCommander(user) {
-        if (commanders.length === 0) return;
-        const hash = (user && user.hash) || '';
-        if (hash && commanders.includes(hash)) return;
-        throw new Error(
-            hash
-                ? `You are not allowed to control the WhatsApp bridge (your certificate hash: ${hash}).`
-                : 'You are not allowed to control the WhatsApp bridge (connect with a Mumble certificate).',
-        );
-    }
-
-    // Channel chat is shared with everyone in the channel, so only prefixed
-    // commands count there; private messages also accept bare commands.
-    function extractMumbleCommand(text, isPrivate) {
-        if (isPrivate) return extractCommand(text);
-        const trimmed = String(text || '').trim();
-        if (trimmed === commandPrefix) return '';
-        if (trimmed.startsWith(commandPrefix) && /\s/.test(trimmed[commandPrefix.length])) {
-            return trimmed.slice(commandPrefix.length).trim();
-        }
-        return null;
-    }
-
+    const onMessage = createMumbleCommandHandler({
+        commandPrefix, commanderIds, extractCommand, parseArgs, handleCommand, log,
+    });
     async function onTextMessage(mumble, event) {
-        const text = mumbleHtmlToText(event.message);
-        const commandText = extractMumbleCommand(text, event.sessions.includes(mumble.session));
-        if (!commandText) return;
-
-        const user = event.user;
-        log.log(`Mumble command from ${user ? user.name : `session ${event.actor}`}: ${text}`);
-
-        let response;
-        try {
-            assertCommander(user);
-            response = await handleCommand(parseArgs(commandText));
-        } catch (error) {
-            response = `Error: ${error.message}`;
-        }
-        if (event.actor !== undefined && mumble.users.has(event.actor)) {
-            mumble.sendTextMessage({ sessions: [event.actor], text: response });
-        }
+        await onMessage({ ...event, private: event.sessions.includes(mumble.session) }, async (text) => {
+            if (event.actor !== undefined && mumble.users.has(event.actor)) {
+                mumble.sendTextMessage({ sessions: [event.actor], text });
+            }
+        });
     }
 
     // Keeps the bot in the bridge client's channel (or the URI channel path)

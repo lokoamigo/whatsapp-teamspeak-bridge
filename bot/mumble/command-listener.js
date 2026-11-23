@@ -10,14 +10,30 @@ const {
     MUMBLE_BOT_DATA_DIR,
     MUMBLE_BOT_URI,
     MUMBLE_URI,
+    MUMBLE_CLIENT,
+    MUMBLE_NATIVE_SOCKET,
 } = require('../config');
 const state = require('../state');
 const { parseArgs } = require('../util');
 const { extractCommand, handleCommand } = require('../commands');
 const { createMumbleChannelControl } = require('./channels');
 const { createMumbleCommandBot, getMumbleBotConfig } = require('./commands');
+const { createNativeMumbleControl } = require('./native');
 
 async function runMumbleCommandBot(waClient) {
+    if (MUMBLE_CLIENT === 'native') {
+        const client = createNativeMumbleControl({
+            socketPath: MUMBLE_NATIVE_SOCKET,
+            commandPrefix: COMMAND_PREFIX,
+            commanderIds: COMMANDER_UIDS,
+            extractCommand,
+            parseArgs,
+            handleCommand: (args) => handleCommand(waClient, args),
+        });
+        state.voiceChannels = client;
+        await client.run();
+        return;
+    }
     let config;
     try {
         config = getMumbleBotConfig(MUMBLE_URI, MUMBLE_BOT_URI);

@@ -25,3 +25,18 @@ jobs:
           PUPPETEER_SKIP_DOWNLOAD: 'true'
       - name: Test bot
         run: npm test
+
+  native-mumble:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Build and test native Mumble
+        run: docker build --target mumble-native-build -t bridge-mumble-native-build:ci .
+      - name: Extract release binary for integration tests
+        run: |
+          mkdir -p native/mumble/target/release
+          docker create --name native-mumble-artifact bridge-mumble-native-build:ci
+          docker cp native-mumble-artifact:/build/target/release/bridge-mumble native/mumble/target/release/bridge-mumble
+          docker rm native-mumble-artifact
+      - name: Test native audio and single-account control
+        run: bash tests/mumble-native/run.sh

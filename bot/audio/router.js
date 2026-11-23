@@ -66,7 +66,7 @@ function createAudioReconciler({
         ]) {
             for (const stream of streams) {
                 const chromium = isChromium(stream);
-                const voice = ['mumble', 'ts3client_linux_amd64'].includes(
+                const voice = ['mumble', 'bridge-mumble', 'ts3client_linux_amd64'].includes(
                     stream.properties?.['application.process.binary'],
                 );
                 if (!chromium && !voice) continue;

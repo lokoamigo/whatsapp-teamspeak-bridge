@@ -38,11 +38,10 @@ each points to the code it would change.
 
 ## Mumble parity
 
-- Mumble mode has no text commands and depends on a GUI client that saves its
-  settings only on a clean exit. Replacing it with a headless Mumble bot
-  library (audio and text over the protocol) would add `!wa` commands. It would
-  also remove the noVNC setup, the Ctrl+Q shutdown workaround and the risk of
-  losing settings.
+- Implemented: Mumble chat commands and an optional native Rust audio/chat
+  client (`BRIDGE_MUMBLE_CLIENT=native`) using one account. The native mode
+  replaces GUI setup and the Ctrl+Q shutdown workaround. GUI mode remains
+  available for compatibility; see `native/mumble/README.md`.
 
 ## Audio quality
 

@@ -63,22 +63,26 @@ test('audio routes both backends and nudges each new Chromium capture once', asy
         stream(11, 'mumble', { sink: 2 }),
         stream(12, 'ts3client_linux_amd64', { sink: 2 }),
         stream(13, 'unrelated', { sink: 1 }),
+        stream(14, 'bridge-mumble', { sink: 2 }),
     ];
     server.data['source-outputs'] = [
         stream(20, 'chromium', { source: 4 }),
         stream(21, 'mumble', { source: 3 }),
         stream(22, 'ts3client_linux_amd64', { source: 3 }),
+        stream(23, 'bridge-mumble', { source: 3 }),
     ];
     await server.reconcile();
     assert.deepStrictEqual(mutations(server), [
         ['move-sink-input', '10', 'wa_out'],
         ['move-sink-input', '11', 'ts_out'],
         ['move-sink-input', '12', 'ts_out'],
+        ['move-sink-input', '14', 'ts_out'],
         ['set-default-source', 'wa_mic'],
         ['set-default-source', 'ts_mic'],
         ['move-source-output', '20', 'ts_mic'],
         ['move-source-output', '21', 'wa_mic'],
         ['move-source-output', '22', 'wa_mic'],
+        ['move-source-output', '23', 'wa_mic'],
     ]);
     server.commands.length = 0;
     await server.reconcile();

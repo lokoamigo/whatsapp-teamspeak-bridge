@@ -2,6 +2,12 @@
 set -euo pipefail
 
 export BRIDGE_VOICE_BACKEND="${BRIDGE_VOICE_BACKEND:-teamspeak}"
+export BRIDGE_MUMBLE_CLIENT="${BRIDGE_MUMBLE_CLIENT:-gui}"
+case "$BRIDGE_MUMBLE_CLIENT" in
+  gui|native) ;;
+  *) echo >&2 "BRIDGE_MUMBLE_CLIENT must be gui or native."; exit 1 ;;
+esac
+export BRIDGE_MUMBLE_NATIVE_AUTOSTART=false
 case "$BRIDGE_VOICE_BACKEND" in
   teamspeak)
     if [[ ! -x /opt/teamspeak3/ts3client_runscript.sh ]]; then
@@ -12,6 +18,10 @@ case "$BRIDGE_VOICE_BACKEND" in
     ;;
   mumble)
     export BRIDGE_TEAMSPEAK_AUTOSTART=false BRIDGE_MUMBLE_AUTOSTART=true
+    if [[ "$BRIDGE_MUMBLE_CLIENT" == native ]]; then
+      [[ -n "${MUMBLE_URI:-}" ]] || { echo >&2 "Native Mumble requires MUMBLE_URI."; exit 1; }
+      export BRIDGE_MUMBLE_AUTOSTART=false BRIDGE_MUMBLE_NATIVE_AUTOSTART=true
+    fi
     ;;
   *)
     echo >&2 "BRIDGE_VOICE_BACKEND must be teamspeak or mumble."
