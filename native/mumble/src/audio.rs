@@ -16,6 +16,62 @@ const MAX_SPEAKERS: usize = 32;
 const MAX_PACKETS: usize = 12;
 const JITTER_DELAY: Duration = Duration::from_millis(40);
 const TICK: Duration = Duration::from_millis(20);
+const VOICE_RMS: u64 = 100; // Approximately -50 dBFS; ignore quiet digital noise.
+const VOICE_RELEASE_FRAMES: u8 = 15; // 300 ms keeps gaps between words open.
+
+pub struct Outgoing {
+    pub packet: Bytes,
+    pub last: bool,
+    pub generation: u64,
+}
+
+enum GateDecision {
+    Quiet,
+    Start,
+    Continue,
+    End,
+}
+
+#[derive(Default)]
+struct VoiceGate {
+    active: bool,
+    release: u8,
+    lead_in: Option<[i16; FRAME]>,
+}
+
+impl VoiceGate {
+    fn reset(&mut self) {
+        *self = Self::default();
+    }
+
+    fn observe(&mut self, pcm: &[i16; FRAME]) -> GateDecision {
+        let energy: u64 = pcm
+            .iter()
+            .map(|sample| i64::from(*sample).pow(2) as u64)
+            .sum();
+        let audible = energy >= FRAME as u64 * VOICE_RMS * VOICE_RMS;
+        if audible {
+            self.release = VOICE_RELEASE_FRAMES;
+            if self.active {
+                GateDecision::Continue
+            } else {
+                self.active = true;
+                GateDecision::Start
+            }
+        } else if self.active {
+            self.release -= 1;
+            if self.release == 0 {
+                self.active = false;
+                GateDecision::End
+            } else {
+                GateDecision::Continue
+            }
+        } else {
+            self.lead_in = Some(*pcm);
+            GateDecision::Quiet
+        }
+    }
+}
 
 struct Packet {
     data: Bytes,
@@ -167,6 +223,7 @@ impl Mixer {
 #[derive(Default)]
 pub struct AudioState {
     pub transmit: AtomicBool,
+    pub speaking: AtomicBool,
     pub receive: AtomicBool,
     pub capture_ready: AtomicBool,
     pub playback_ready: AtomicBool,
@@ -181,7 +238,7 @@ pub struct AudioState {
 
 pub struct Audio {
     pub state: Arc<AudioState>,
-    pub outgoing: mpsc::Receiver<Bytes>,
+    pub outgoing: mpsc::Receiver<Outgoing>,
     incoming: std::sync::mpsc::SyncSender<(u64, VoicePacket)>,
 }
 
@@ -219,6 +276,8 @@ impl Audio {
             };
             let mut stream = None;
             let mut pcm = [0; FRAME];
+            let mut gate = VoiceGate::default();
+            let mut generation = state.generation.load(Ordering::Relaxed);
             let mut last_error = None;
             while !state.stopped.load(Ordering::Relaxed) {
                 if stream.is_none() {
@@ -241,20 +300,76 @@ impl Audio {
                     .is_err()
                 {
                     state.capture_ready.store(false, Ordering::Relaxed);
+                    state.speaking.store(false, Ordering::Relaxed);
+                    gate.reset();
                     stream = None;
                     continue;
                 }
+                let current = state.generation.load(Ordering::Relaxed);
+                if generation != current {
+                    gate.reset();
+                    state.speaking.store(false, Ordering::Relaxed);
+                    generation = current;
+                }
                 if !state.transmit.load(Ordering::Relaxed) {
+                    gate.reset();
+                    state.speaking.store(false, Ordering::Relaxed);
                     continue;
                 }
-                match encoder.encode(&pcm) {
-                    Ok(packet) => {
-                        state.captured.fetch_add(1, Ordering::Relaxed);
-                        if out_tx.try_send(Bytes::from(packet)).is_err() {
+                match gate.observe(&pcm) {
+                    GateDecision::Start => {
+                        // Opus must begin a new talk burst without stale predictor state.
+                        if let Err(error) = encoder.reset() {
+                            report_audio_error(&mut last_error, &error);
+                            gate.reset();
+                            continue;
+                        }
+                        if let Some(lead_in) = gate.lead_in.take() {
+                            send_frame(
+                                &mut encoder,
+                                &lead_in,
+                                generation,
+                                &out_tx,
+                                &state,
+                                &mut last_error,
+                            );
+                        }
+                        state.speaking.store(true, Ordering::Relaxed);
+                        send_frame(
+                            &mut encoder,
+                            &pcm,
+                            generation,
+                            &out_tx,
+                            &state,
+                            &mut last_error,
+                        );
+                    }
+                    GateDecision::Continue => {
+                        state.speaking.store(true, Ordering::Relaxed);
+                        send_frame(
+                            &mut encoder,
+                            &pcm,
+                            generation,
+                            &out_tx,
+                            &state,
+                            &mut last_error,
+                        );
+                    }
+                    GateDecision::End => {
+                        state.speaking.store(false, Ordering::Relaxed);
+                        // Data frames reserve one slot for the terminator.
+                        if out_tx
+                            .try_send(Outgoing {
+                                packet: Bytes::new(),
+                                last: true,
+                                generation,
+                            })
+                            .is_err()
+                        {
                             state.dropped.fetch_add(1, Ordering::Relaxed);
                         }
                     }
-                    Err(error) => report_audio_error(&mut last_error, &error),
+                    GateDecision::Quiet => {}
                 }
             }
         });
@@ -345,8 +460,40 @@ impl Audio {
     }
     pub fn offline(&self) {
         self.state.transmit.store(false, Ordering::Relaxed);
+        self.state.speaking.store(false, Ordering::Relaxed);
         self.state.receive.store(false, Ordering::Relaxed);
         self.state.generation.fetch_add(1, Ordering::Relaxed);
+    }
+}
+
+fn send_frame(
+    encoder: &mut Encoder,
+    pcm: &[i16; FRAME],
+    generation: u64,
+    tx: &mpsc::Sender<Outgoing>,
+    state: &AudioState,
+    last_error: &mut Option<Instant>,
+) {
+    // Keep one slot free so a talk burst can always finish cleanly.
+    if tx.capacity() <= 1 {
+        state.dropped.fetch_add(1, Ordering::Relaxed);
+        return;
+    }
+    match encoder.encode(pcm) {
+        Ok(packet) => {
+            state.captured.fetch_add(1, Ordering::Relaxed);
+            if tx
+                .try_send(Outgoing {
+                    packet: Bytes::from(packet),
+                    last: false,
+                    generation,
+                })
+                .is_err()
+            {
+                state.dropped.fetch_add(1, Ordering::Relaxed);
+            }
+        }
+        Err(error) => report_audio_error(last_error, &error),
     }
 }
 impl Drop for Audio {
@@ -367,6 +514,29 @@ fn report_audio_error(last: &mut Option<Instant>, error: &anyhow::Error) {
 mod tests {
     use super::*;
     use mumble_client_protocol::Transport;
+
+    #[test]
+    fn voice_gate_leads_in_releases_and_reopens() {
+        let mut gate = VoiceGate::default();
+        let quiet = [0; FRAME];
+        let below = [99; FRAME];
+        let voice = [100; FRAME];
+        assert!(matches!(gate.observe(&quiet), GateDecision::Quiet));
+        assert!(matches!(gate.observe(&below), GateDecision::Quiet));
+        assert!(matches!(gate.observe(&voice), GateDecision::Start));
+        assert_eq!(gate.lead_in.take(), Some(below));
+        for _ in 0..VOICE_RELEASE_FRAMES - 1 {
+            assert!(matches!(gate.observe(&quiet), GateDecision::Continue));
+        }
+        assert!(matches!(gate.observe(&quiet), GateDecision::End));
+        assert!(matches!(gate.observe(&quiet), GateDecision::Quiet));
+        assert!(matches!(gate.observe(&voice), GateDecision::Start));
+        assert_eq!(gate.lead_in.take(), Some(quiet));
+        assert!(matches!(gate.observe(&voice), GateDecision::Continue));
+        gate.reset();
+        assert!(matches!(gate.observe(&voice), GateDecision::Start));
+        assert_eq!(gate.lead_in.take(), None);
+    }
     fn packet(session: u32, seq: u64, data: Bytes, last: bool) -> VoicePacket {
         VoicePacket {
             session,
