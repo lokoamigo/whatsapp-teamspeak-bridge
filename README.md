@@ -145,7 +145,9 @@ abgewiesen. Die Pins liegen in `/data/mumble/native/known-servers.json`.
 Der native Client verwendet direkt `wa_mic` für Aufnahme und `ts_out` für
 Wiedergabe: 48 kHz Mono, 20-ms-Opus-Pakete und standardmäßig 32 kbit/s
 (`MUMBLE_NATIVE_BITRATE`: 8000–64000). Er mischt gleichzeitige Sprecher,
-begrenzt Puffer und Sprecherzustand und unterstützt verschlüsseltes UDP mit
+sendet nur bei Tonaktivität oberhalb etwa -50 dBFS RMS und beendet eine
+Übertragung nach 300 ms Stille. `transmitting` im Status zeigt diese Aktivität.
+Er begrenzt Puffer und Sprecherzustand und unterstützt verschlüsseltes UDP mit
 TCP-Fallback. Netzwerk- und PulseAudio-Ausfälle werden automatisch behandelt.
 Audio und Chat bleiben im selben Konto; der Node-Bot kommuniziert über einen
 privaten Unix-Socket mit dem nativen Prozess.

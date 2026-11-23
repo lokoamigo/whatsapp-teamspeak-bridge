@@ -203,6 +203,12 @@ async function main() {
     assert.strictEqual(JSON.parse(health).connected, true);
     step('independent health probes work while Node owns command control');
 
+    await pause(500);
+    const idle = await bridge.control.request('status');
+    assert.strictEqual(idle.transmitting, false);
+    assert.strictEqual(idle.captured, 0, 'digital silence must not be encoded or sent');
+    step('idle capture does not transmit silence');
+
     await until('UDP enabled for direct peer', async () => (await peerB.control.request('status')).transport === 'udp');
     assert.strictEqual((await bridge.control.request('status')).transport, 'tcp');
     step('encrypted UDP and TCP-only fallback are both active');
@@ -212,7 +218,13 @@ async function main() {
     const sendingA = tone(bridge, 600, 4);
     await until('bridge to Mumble PCM', () => power(recordB.pcm(), 600) > 300);
     assert.ok(power(recordA.pcm(), 600) < 150, 'own audio must not feed back');
-    await stop(sendingA); await pause(400); recordA.clear();
+    await stop(sendingA);
+    await until('voice activity releases after sound stops', async () => !(await bridge.control.request('status')).transmitting);
+    const afterSound = (await bridge.control.request('status')).captured;
+    await pause(500);
+    assert.strictEqual((await bridge.control.request('status')).captured, afterSound,
+        'capture count must stay still after the release period');
+    recordA.clear();
     const sendingB = tone(peerB, 440, 5);
     const sendingC = tone(peerC, 880, 5);
     await until('simultaneous speakers mixed into WhatsApp PCM', () => power(recordA.pcm(), 440) > 250 && power(recordA.pcm(), 880) > 250);

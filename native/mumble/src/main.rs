@@ -312,7 +312,8 @@ async fn connected(
                 None => break Err(anyhow::anyhow!("Mumble voice transport stopped")),
             },
             packet = audio.outgoing.recv() => match packet {
-                Some(packet) if audio.state.transmit.load(Relaxed) => voice.send_audio(OutgoingAudio::new(packet, 2, false)),
+                Some(packet) if audio.state.transmit.load(Relaxed) && packet.generation == audio.state.generation.load(Relaxed) =>
+                    voice.send_audio(OutgoingAudio::new(packet.packet, if packet.last { 0 } else { 2 }, packet.last)),
                 Some(_) => {},
                 None => break Err(anyhow::anyhow!("Native capture worker stopped")),
             },

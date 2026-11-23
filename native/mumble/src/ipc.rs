@@ -111,7 +111,7 @@ async fn serve_peer(stream: UnixStream, service: Arc<Service>, requests: mpsc::S
                                 "connected":handle.as_ref().is_some_and(Handle::is_connected),
                                 "captureReady":audio.capture_ready.load(Relaxed),
                                 "playbackReady":audio.playback_ready.load(Relaxed),
-                                    "transmitting":audio.transmit.load(Relaxed),"receiving":audio.receive.load(Relaxed),
+                                    "transmitting":audio.speaking.load(Relaxed),"receiving":audio.receive.load(Relaxed),
                                 "captured":audio.captured.load(Relaxed),"played":audio.played.load(Relaxed),
                                 "dropped":audio.dropped.load(Relaxed),
                                 "transport":if audio.udp.load(Relaxed) { "udp" } else { "tcp" }}})

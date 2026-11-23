@@ -79,6 +79,14 @@ impl Encoder {
         packet.truncate(size as usize);
         Ok(packet)
     }
+
+    pub fn reset(&mut self) -> Result<()> {
+        // OPUS_RESET_STATE takes no additional argument.
+        if unsafe { opus_encoder_ctl(self.0.as_ptr(), 4028) } != 0 {
+            bail!("Cannot reset Opus encoder");
+        }
+        Ok(())
+    }
 }
 
 impl Decoder {
