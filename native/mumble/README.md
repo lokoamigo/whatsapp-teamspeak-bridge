@@ -55,11 +55,12 @@ cargo build --release --locked --manifest-path native/mumble/Cargo.toml
 
 ## Bounds and recovery
 
-- 20-ms, 48-kHz mono frames; 40-ms initial jitter delay.
+- 20-ms, 48-kHz mono frames; 120-ms initial receive jitter buffer so delayed
+  speech is played instead of concealed and then discarded.
 - Capture transmits only above roughly -50 dBFS RMS, with 20 ms of lead-in
   and a 300-ms release. Silence sends a Mumble transmission terminator and
   stops Opus encoding; `transmitting` in status reports current sound activity.
-- At most 32 speakers and 12 encoded packets per speaker; speaker state expires
+- At most 32 speakers and 24 encoded packets per speaker; speaker state expires
   after two seconds without packets. Late/duplicate packets are discarded.
 - Bounded capture, playback, RPC, event and IPC queues. A stalled control link
   is disconnected rather than retaining unlimited audio. Delayed audio is

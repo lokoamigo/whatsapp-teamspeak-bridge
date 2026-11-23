@@ -13,8 +13,10 @@ use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 
 const MAX_SPEAKERS: usize = 32;
-const MAX_PACKETS: usize = 12;
-const JITTER_DELAY: Duration = Duration::from_millis(40);
+const MAX_PACKETS: usize = 24;
+// The fixed 40 ms lead previously concealed ordinary delayed speech packets,
+// then discarded them when they arrived. Buffer six 20 ms frames before play.
+const JITTER_DELAY: Duration = Duration::from_millis(120);
 const TICK: Duration = Duration::from_millis(20);
 const VOICE_RMS: u64 = 100; // Approximately -50 dBFS; ignore quiet digital noise.
 const VOICE_RELEASE_FRAMES: u8 = 15; // 300 ms keeps gaps between words open.
@@ -582,6 +584,42 @@ mod tests {
                 .all(|s| *s == 0)
         );
         assert!(two.speakers.is_empty());
+    }
+    #[test]
+    fn delayed_second_packet_is_played_without_concealment() {
+        let mut encoder = Encoder::new(32000).unwrap();
+        let tone = std::array::from_fn(|i| ((i as f32 * 0.0576).sin() * 4000.) as i16);
+        let first = Bytes::from(encoder.encode(&tone).unwrap());
+        let second = Bytes::from(encoder.encode(&tone).unwrap());
+        let now = Instant::now();
+        let mut mixer = Mixer::new();
+        mixer.push(packet(1, 0, first, false), now);
+        assert!(
+            mixer
+                .render(now + Duration::from_millis(40))
+                .iter()
+                .all(|s| *s == 0)
+        );
+        assert!(
+            mixer
+                .render(now + Duration::from_millis(60))
+                .iter()
+                .all(|s| *s == 0)
+        );
+        mixer.push(packet(1, 2, second, false), now + Duration::from_millis(70));
+        assert!(mixer.speakers[&1].packets.contains_key(&2));
+        assert!(
+            mixer
+                .render(now + JITTER_DELAY)
+                .iter()
+                .any(|s| s.abs() > 100)
+        );
+        assert!(
+            mixer
+                .render(now + JITTER_DELAY + TICK)
+                .iter()
+                .any(|s| s.abs() > 100)
+        );
     }
     #[test]
     fn speaker_and_jitter_memory_are_bounded() {
