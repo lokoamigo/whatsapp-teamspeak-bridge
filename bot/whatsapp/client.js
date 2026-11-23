@@ -27,6 +27,7 @@ const { refreshWhatsAppReady, startReadyPoller } = require('./readiness');
 
 async function createWhatsAppClient() {
     startChannelPollCleanup();
+    const headless = process.env.BRIDGE_BROWSER_MODE === 'headless';
     const client = new Client({
         authStrategy: new NoAuth(),
         forceWebCalling: FORCE_WEB_CALLING,
@@ -37,7 +38,9 @@ async function createWhatsAppClient() {
         },
         puppeteer: {
             executablePath: CHROMIUM_EXECUTABLE,
-            headless: false,
+            headless,
+            // Puppeteer otherwise mutes headless playback.
+            ignoreDefaultArgs: headless ? ['--mute-audio'] : undefined,
             defaultViewport: null,
             userDataDir: CHROMIUM_PROFILE,
             args: [
@@ -60,7 +63,7 @@ async function createWhatsAppClient() {
                 '--disable-renderer-backgrounding',
                 '--disable-session-crashed-bubble',
                 `--window-size=${DISPLAY_WIDTH},${DISPLAY_HEIGHT}`,
-                '--start-maximized',
+                ...(headless ? [] : ['--start-maximized']),
             ],
         },
         takeoverOnConflict: false,
@@ -97,9 +100,9 @@ async function createWhatsAppClient() {
         // WhatsApp refreshes the QR code every ~20 s; only announce the first.
         if (state.awaitingQr) return;
         state.awaitingQr = true;
-        console.log(
-            'WhatsApp is not linked: scan the QR code shown in Chromium via noVNC (port 6080) with WhatsApp > Linked devices.',
-        );
+        console.log(headless
+            ? 'WhatsApp is not linked. Run bridge-browser-mode maintenance and scan the QR code with noVNC.'
+            : 'WhatsApp is not linked: scan the QR code shown in Chromium via noVNC (port 6080) with WhatsApp > Linked devices.');
     });
 
     client.on('authenticated', () => {
@@ -126,9 +129,9 @@ async function createWhatsAppClient() {
             // phone). WhatsApp Web clears its own session data and shows a new
             // QR code in the same Chromium window; the bot keeps running.
             // The Chromium profile is deliberately left untouched.
-            console.error(
-                'WhatsApp linked device was logged out. Re-link it: open noVNC (port 6080) and scan the QR code in Chromium with WhatsApp > Linked devices.',
-            );
+            console.error(headless
+                ? 'WhatsApp linked device logged out. Run bridge-browser-mode maintenance to re-link it with noVNC.'
+                : 'WhatsApp linked device logged out. Open noVNC (port 6080) and scan the QR code in Chromium with WhatsApp > Linked devices.');
             // A new session needs the same ready recovery as a fresh start.
             state.recoveredEventListenersAttached = false;
             startReadyPoller(client);

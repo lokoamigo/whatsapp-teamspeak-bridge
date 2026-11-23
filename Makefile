@@ -19,7 +19,8 @@ status:
 	      if [ "$${BRIDGE_MUMBLE_CLIENT:-gui}" = native ]; then set -- mumble-native; else set -- mumble; fi ;; \
 	    *) set -- teamspeak clientquery-relay clientquery-watchdog ;; \
 	  esac; \
-	  exec supervisorctl status xvfb pulseaudio openbox desktop-panel x11vnc novnc bridge-bot "$$@"'
+	  if [ "$$(bridge-browser-mode status)" = maintenance ]; then set -- xvfb openbox desktop-panel x11vnc "$$@"; fi; \
+	  exec supervisorctl status pulseaudio novnc bridge-bot "$$@"'
 
 logs:
 	$(COMPOSE) logs -f bridge
