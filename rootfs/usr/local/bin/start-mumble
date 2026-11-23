@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ "${BRIDGE_MUMBLE_CLIENT:-gui}" != gui ]]; then
+  echo >&2 'The Mumble GUI is disabled in native mode. Select BRIDGE_MUMBLE_CLIENT=gui and restart to use it.'
+  exit 1
+fi
 /usr/local/bin/wait-for-display
 /usr/local/bin/wait-for-audio
 

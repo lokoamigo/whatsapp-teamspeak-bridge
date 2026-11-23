@@ -15,7 +15,8 @@ status:
 	$(COMPOSE) ps
 	$(COMPOSE) exec bridge sh -c '\
 	  case "$${BRIDGE_VOICE_BACKEND:-teamspeak}" in \
-	    mumble) set -- mumble ;; \
+	    mumble) \
+	      if [ "$${BRIDGE_MUMBLE_CLIENT:-gui}" = native ]; then set -- mumble-native; else set -- mumble; fi ;; \
 	    *) set -- teamspeak clientquery-relay clientquery-watchdog ;; \
 	  esac; \
 	  exec supervisorctl status xvfb pulseaudio openbox desktop-panel x11vnc novnc bridge-bot "$$@"'

@@ -26,6 +26,8 @@ const TS3_URI = process.env.TS3_URI || '';
 const VOICE_BACKEND = process.env.BRIDGE_VOICE_BACKEND || 'teamspeak';
 const VOICE_BACKEND_LABEL = VOICE_BACKEND === 'mumble' ? 'Mumble' : 'TeamSpeak';
 const MUMBLE_URI = process.env.MUMBLE_URI || '';
+const MUMBLE_CLIENT = process.env.BRIDGE_MUMBLE_CLIENT || 'gui';
+const MUMBLE_NATIVE_SOCKET = process.env.MUMBLE_NATIVE_SOCKET || '/tmp/runtime-bridge/mumble-native.sock';
 const MUMBLE_BOT_URI = process.env.MUMBLE_BOT_URI || '';
 const MUMBLE_BOT_DATA_DIR = process.env.MUMBLE_BOT_DATA_DIR || '/data/mumble/bridge-bot';
 const CHROMIUM_EXECUTABLE =
@@ -122,6 +124,8 @@ module.exports = {
     VOICE_BACKEND,
     VOICE_BACKEND_LABEL,
     MUMBLE_URI,
+    MUMBLE_CLIENT,
+    MUMBLE_NATIVE_SOCKET,
     MUMBLE_BOT_URI,
     MUMBLE_BOT_DATA_DIR,
     CHROMIUM_EXECUTABLE,

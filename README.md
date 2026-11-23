@@ -62,7 +62,8 @@ BRIDGE_VOICE_BACKEND=mumble
 MUMBLE_URI=mumble://WhatsAppBridge@mumble.example.org:64738/Bridge
 ```
 
-`MUMBLE_URI` ist optional; ohne URI erfolgt die Serverauswahl im noVNC-Desktop.
+Standard ist `BRIDGE_MUMBLE_CLIENT=gui`. In diesem Modus ist `MUMBLE_URI`
+optional; ohne URI erfolgt die Serverauswahl im noVNC-Desktop.
 Das [Mumble-URI-Format](https://www.mumble.info/documentation/user/mumble-url/)
 unterstützt Benutzername, Serverpasswort, Port und Kanalpfad, zum Beispiel
 `mumble://WhatsAppBridge:serverpasswort@mumble.example.org:64738/Parent/Bridge`.
@@ -100,10 +101,73 @@ gelten aus Kompatibilitätsgründen auch im Mumble-Modus.
 Mumble wird als Audio-Client verwendet. `!wa`-Textbefehle funktionieren über
 den Mumble-Chat (siehe [Steuerung per Mumble-Chat](#steuerung-per-mumble-chat)).
 `!switchChannel`, `!invite` und die HTTP-Status-API bleiben verfügbar;
-`!switchChannel` benötigt im Mumble-Modus die Move-Berechtigung für den
-Bot-Nutzer (siehe unten).
+`!switchChannel` benötigt im GUI-Modus die Move-Berechtigung für den
+Bot-Nutzer (siehe unten). Der native Client wechselt seinen eigenen Kanal.
 TeamSpeak, ClientQuery-Relay und ClientQuery-Watchdog bleiben im Mumble-Modus
 gestoppt; entsprechend ist Port `25640` dann ohne Funktion.
+
+### Nativer Mumble-Client mit einem Konto
+
+Mit `BRIDGE_MUMBLE_CLIENT=native` ersetzt ein kleiner Rust-Prozess die
+Mumble-GUI und den separaten Chat-Bot. Ein einziges Konto übernimmt Audio,
+`!wa`-Befehle, Antworten, Kanalwechsel und Call-Hinweise. `MUMBLE_BOT_URI`
+wird in diesem Modus nicht verwendet. Chromium bleibt im Besitz des Node-Bots.
+
+```dotenv
+BRIDGE_VOICE_BACKEND=mumble
+BRIDGE_MUMBLE_CLIENT=native
+MUMBLE_URI=mumble://WhatsAppBridge@mumble.example.org:64738/Bridge
+MUMBLE_NATIVE_BITRATE=32000
+```
+
+`MUMBLE_URI` ist im nativen Modus erforderlich. Der Client startet Audio erst,
+nachdem der Server den Eintritt in den URI-Kanal bestätigt hat. Für einen
+Kanalwechsel gelten die normalen **Enter/Traverse**-Berechtigungen; ein zweites
+Konto mit **Move** ist nicht nötig. `BRIDGE_COMMANDER_UIDS` behält seine
+Bedeutung als Liste erlaubter Mumble-Zertifikat-Hashes.
+
+Beim ersten Start importiert der Client die vorhandene Identität aus
+`/data/mumble/.config/Mumble/Mumble.conf` nach
+`/data/mumble/native/identity.pem`. Die GUI-Datei wird nicht verändert.
+Eine nicht lesbare Identität führt zum Fehler statt zu einem neuen Zertifikat.
+Ohne vorhandenes GUI-Profil wird eine neue persistente Identität erstellt.
+Alternativ lässt sich vor dem ersten nativen Start mit
+`MUMBLE_NATIVE_IDENTITY_IMPORT=/data/mumble/identity.p12` ein PEM- oder
+PKCS#12-Export importieren; für geschützte Exporte dient
+`MUMBLE_NATIVE_IDENTITY_PASSWORD`. Bereits vorhandene native Identitäten
+werden beibehalten. Private Schlüssel und Passwörter nicht in Logs oder Git
+übernehmen.
+
+Vorhandene SHA-256-Server-Pins des Chat-Bots werden übernommen. Weitere
+Serverzertifikate werden beim ersten Verbinden gepinnt; Änderungen werden
+abgewiesen. Die Pins liegen in `/data/mumble/native/known-servers.json`.
+
+Der native Client verwendet direkt `wa_mic` für Aufnahme und `ts_out` für
+Wiedergabe: 48 kHz Mono, 20-ms-Opus-Pakete und standardmäßig 32 kbit/s
+(`MUMBLE_NATIVE_BITRATE`: 8000–64000). Er mischt gleichzeitige Sprecher,
+begrenzt Puffer und Sprecherzustand und unterstützt verschlüsseltes UDP mit
+TCP-Fallback. Netzwerk- und PulseAudio-Ausfälle werden automatisch behandelt.
+Audio und Chat bleiben im selben Konto; der Node-Bot kommuniziert über einen
+privaten Unix-Socket mit dem nativen Prozess.
+
+Nach der Auswahl mit `make restart` neu bauen und starten. Diagnose:
+
+```bash
+docker compose exec bridge supervisorctl status mumble-native bridge-bot
+docker compose exec -u bridge bridge bridge-mumble --status
+```
+
+Die zweite Abfrage zeigt Verbindung, Audio-Bereitschaft, Transport und
+Paket-Zähler; der Container-Healthcheck prüft im nativen Modus auch diese
+Bereitschaft. `mumble`, TeamSpeak und ClientQuery bleiben dann gestoppt.
+Für den Rückweg `BRIDGE_MUMBLE_CLIENT=gui` setzen und `make restart` ausführen.
+Das alte GUI-Profil bleibt erhalten. Bei einer neuen Installation ohne früheres
+GUI-Profil muss die native Identität bei Bedarf als PKCS#12 exportiert und in
+der GUI importiert werden, um dieselbe Registrierung weiterzuverwenden.
+
+Build, native Tests und Protokoll-Abhängigkeit sind unter
+[`native/mumble`](native/mumble/README.md) beschrieben. Live-WhatsApp-Anrufe
+nach einer Umstellung zusätzlich in beide Richtungen prüfen.
 
 ## 2. Bauen und starten
 
@@ -278,7 +342,7 @@ WhatsApp-Gruppen-IDs (`@g.us`) werden weiterhin abgewiesen.
 
 ### Steuerung per Mumble-Chat
 
-Im Mumble-Modus verbindet sich der Bot zusätzlich als eigener Mumble-Nutzer
+Im GUI-Modus verbindet sich der Bot zusätzlich als eigener Mumble-Nutzer
 `<Nutzername aus MUMBLE_URI>-Bot` (ohne URI-Nutzername `WhatsAppBridge-Bot`)
 mit dem Server aus `MUMBLE_URI`. Er ist stummgeschaltet und taub, überträgt also
 kein Audio, und folgt dem Bridge-Client automatisch in dessen Kanal. Ist der
@@ -294,13 +358,16 @@ Nachricht:
 
 Der Befehlsumfang entspricht den TeamSpeak-Befehlen oben (`!wa help`).
 
+Im nativen Modus gehen private Befehle direkt an den Audio-Nutzer aus
+`MUMBLE_URI`; Kanalbefehle und private Antworten funktionieren genauso.
+
 Im Mumble-Modus enthält `BRIDGE_COMMANDER_UIDS` statt TeamSpeak-UIDs
 Mumble-Zertifikat-Hashes (SHA-1, 40 Hex-Zeichen, kommagetrennt). Ein nicht
 berechtigter Nutzer bekommt seinen Hash in der Fehlermeldung angezeigt; Nutzer
 ohne Zertifikat werden dann abgewiesen. Bleibt die Liste leer, darf jeder
 Nutzer, der den Bot erreicht, Befehle ausführen.
 
-Optional verwendet `MUMBLE_BOT_URI` für den Bot einen eigenen Nutzernamen,
+Im GUI-Modus verwendet `MUMBLE_BOT_URI` optional für den Bot einen eigenen Nutzernamen,
 Server, eigenes Serverpasswort oder Kanalpfad, z. B.
 `mumble://WhatsAppBot:serverpasswort@mumble.example.org:64738/Bridge`.
 
@@ -312,7 +379,7 @@ Mumble-Client beim ersten Verbinden vertraut und in
 verweigert der Bot die Verbindung und meldet das im Log. Nach einem
 beabsichtigten Zertifikatswechsel den Eintrag aus der Datei entfernen.
 
-`!switchChannel` aus WhatsApp verschiebt im Mumble-Modus den Bridge-Client
+`!switchChannel` aus WhatsApp verschiebt im GUI-Modus den Bridge-Client
 (Nutzername aus `MUMBLE_URI`) über die Verbindung des Bot-Nutzers; der Bot folgt
 ihm anschließend. Dafür braucht der Bot-Nutzer auf dem Mumble-Server die
 ACL-Berechtigung **Move** im aktuellen und im Zielkanal, am einfachsten im
