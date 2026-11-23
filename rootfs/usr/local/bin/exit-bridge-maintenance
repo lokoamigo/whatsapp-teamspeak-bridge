@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+exec 9>/tmp/runtime-bridge/exit-maintenance.lock
+flock -n 9 || exit 0
+
+if ! xmessage -name 'Exit maintenance' -center \
+    -buttons 'Cancel:1,Exit maintenance:0' -default Cancel \
+    $'Switch to headless mode?\n\nChromium will restart and any active WhatsApp call will end.\nThis noVNC session will disconnect.'; then
+  exit 0
+fi
+
+# Tint2 stops its attached commands when the panel shuts down. Detach the
+# switch so it can finish after the panel and VNC have gone away.
+exec setsid -f /bin/bash -c '
+  if ! sudo -n /usr/local/bin/bridge-browser-mode headless; then
+    xmessage -center "Could not switch browser mode. Check Supervisor from the Docker host."
+  fi
+' </dev/null >/tmp/runtime-bridge/exit-maintenance.log 2>&1

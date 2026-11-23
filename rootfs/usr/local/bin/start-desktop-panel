@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 /usr/local/bin/wait-for-display
+config=/etc/bridge/tint2rc
+if [[ -f /run/bridge-native-mumble ]]; then
+  config=/tmp/runtime-bridge/tint2rc
+  sed 's/^panel_items = LTS$/panel_items = LPTS/' /etc/bridge/tint2rc > "$config"
+fi
 for _ in $(seq 1 60); do
   if wmctrl -m >/dev/null 2>&1; then
-    exec /usr/bin/tint2 -c /etc/bridge/tint2rc
+    exec /usr/bin/tint2 -c "$config"
   fi
   sleep 1
 done
