@@ -29,6 +29,11 @@ case "$BRIDGE_VOICE_BACKEND" in
     ;;
 esac
 
+export BRIDGE_DESKTOP_AUTOSTART=true
+if [[ $(/usr/local/bin/bridge-browser-mode status) == headless ]]; then
+  export BRIDGE_DESKTOP_AUTOSTART=false
+fi
+
 # Xorg erwartet das gemeinsame Unix-Socket-Verzeichnis als root:root mit Sticky-Bit.
 install -d -o root -g root -m 1777 /tmp/.X11-unix
 

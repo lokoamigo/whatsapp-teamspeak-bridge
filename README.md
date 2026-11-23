@@ -171,6 +171,26 @@ Build, native Tests und Protokoll-Abhängigkeit sind unter
 [`native/mumble`](native/mumble/README.md) beschrieben. Live-WhatsApp-Anrufe
 nach einer Umstellung zusätzlich in beide Richtungen prüfen.
 
+### Browsermodus für nativen Mumble
+
+Der Container startet zunächst im Wartungsmodus mit sichtbarem Chromium.
+Nach dem Verknüpfen von WhatsApp lässt sich der Desktop für den laufenden
+Betrieb abschalten und bei Bedarf wieder öffnen.
+
+```bash
+docker compose exec bridge bridge-browser-mode status
+docker compose exec bridge bridge-browser-mode headless
+docker compose exec bridge bridge-browser-mode maintenance
+```
+
+Führe den Wechsel zwischen Anrufen aus. Er startet den WhatsApp-Bot samt
+Chromium neu und unterbricht laufende Anrufe. Beide Modi verwenden dasselbe
+Chromium-Profil und dieselbe WhatsApp-Anmeldung. Die Auswahl bleibt in
+`/data/browser-mode` beim Neustart und Ersetzen des Containers erhalten.
+Im Headless-Modus läuft die noVNC-Webseite für den Healthcheck weiter.
+Für eine Desktop-Verbindung und QR-Anmeldung zuerst `maintenance` wählen.
+TeamSpeak und Mumble mit GUI benötigen weiterhin den Desktop.
+
 ## 2. Bauen und starten
 
 ```bash

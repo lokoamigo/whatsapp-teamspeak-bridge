@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+mode_file=/data/browser-mode
+native_mumble=false
+if [[ ${BRIDGE_VOICE_BACKEND:-teamspeak} == mumble && ${BRIDGE_MUMBLE_CLIENT:-gui} == native ]]; then
+  native_mumble=true
+fi
+
+case "${1:-status}" in
+  status)
+    if $native_mumble && [[ -f "$mode_file" && $(<"$mode_file") == headless ]]; then
+      echo headless
+    else
+      echo maintenance
+    fi
+    exit 0
+    ;;
+  headless|maintenance) mode=$1 ;;
+  *) echo >&2 'Usage: bridge-browser-mode [status|headless|maintenance]'; exit 2 ;;
+esac
+
+if ! $native_mumble; then
+  echo >&2 'Browser mode switching requires native Mumble.'
+  exit 1
+fi
+if (( EUID != 0 )); then
+  echo >&2 'Run the mode switch as root inside the bridge container.'
+  exit 1
+fi
+
+exec 9>/run/bridge-browser-mode.lock
+flock -x 9
+
+set_service() {
+  local action=$1 service=$2 status name state
+  # Supervisor returns a nonzero status code for stopped processes.
+  status=$(supervisorctl status "$service") || true
+  read -r name state _ <<< "$status"
+  if [[ $name != "$service" ]]; then
+    echo >&2 "Cannot determine Supervisor state for $service."
+    return 1
+  fi
+  case "$state" in
+    RUNNING|STARTING)
+      if [[ $action == stop ]]; then supervisorctl stop "$service"; fi ;;
+    STOPPED|FATAL|EXITED)
+      if [[ $action == start ]]; then supervisorctl start "$service"; fi ;;
+    BACKOFF)
+      supervisorctl stop "$service"
+      if [[ $action == start ]]; then supervisorctl start "$service"; fi ;;
+    *) echo >&2 "Cannot determine Supervisor state for $service."; return 1 ;;
+  esac
+}
+
+set_service stop bridge-bot
+if [[ $mode == headless ]]; then
+  for service in x11vnc desktop-panel openbox xvfb; do set_service stop "$service"; done
+else
+  for service in xvfb openbox desktop-panel x11vnc; do set_service start "$service"; done
+fi
+
+# Publish the mode atomically so bot and container restarts see one value.
+temporary=$(mktemp /data/.browser-mode.XXXXXX)
+trap 'rm -f -- "$temporary"' EXIT
+printf '%s\n' "$mode" > "$temporary"
+chmod 0644 "$temporary"
+mv -fT "$temporary" "$mode_file"
+set_service start bridge-bot
+printf 'Browser mode: %s\n' "$mode"
