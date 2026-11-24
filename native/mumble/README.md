@@ -79,3 +79,23 @@ cargo build --release --locked --manifest-path native/mumble/Cargo.toml
 `bridge-mumble --status` works independently of Node and exits nonzero if the
 Mumble connection or either PulseAudio stream is unavailable. No HTTP listener
 or externally accessible control port is added.
+
+## Receive diagnostics
+
+Run `docker compose exec bridge bridge-mumble --status` while comparing a phone
+and desktop Mumble client. Speak from one client at a time and compare the
+counter changes under `receiveDiagnostics.senders` by Mumble session ID.
+
+- `receivedPackets` counts valid audio packets presented to the sender's mixer.
+- `latePackets` counts packets whose start has already passed the playout cursor,
+  including packets whose tail can still be decoded and played.
+- `concealedSamples` counts samples Opus synthesized when an expected packet was
+  missing. There are 48 samples per millisecond.
+- `jitterResets` counts gaps long enough to stop concealment and resume with a
+  fresh buffer.
+- `mixClippedSamples` counts samples that hit the mixer limits after summing
+  all senders. It appears once under `receiveDiagnostics`.
+
+Status keeps up to 32 recent sender entries and expires entries 60 seconds
+after their last audio packet. Moving rooms or reconnecting clears these
+diagnostics. Entries contain numeric session IDs and counters.

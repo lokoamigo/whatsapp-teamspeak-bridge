@@ -237,6 +237,22 @@ async function main() {
     await stop(sendingB); await stop(sendingC);
     step('bidirectional PCM survives Opus/server transport; overlapping speakers mix without a loop');
 
+    const peerSessions = [...admin.users.values()].filter((u) => ['PeerB', 'PeerC'].includes(u.name))
+        .map((u) => u.session);
+    assert.strictEqual(peerSessions.length, 2);
+    const receiveDiagnostics = await until('independent receive counters', async () => {
+        const { receiveDiagnostics: stats } = await bridge.control.request('status');
+        return peerSessions.every((session) => stats.senders[session]?.receivedPackets > 0) && stats;
+    });
+    for (const session of peerSessions) {
+        const stats = receiveDiagnostics.senders[session];
+        for (const key of ['latePackets', 'concealedSamples', 'jitterResets']) {
+            assert.ok(Number.isSafeInteger(stats[key]) && stats[key] >= 0);
+        }
+    }
+    assert.ok(Number.isSafeInteger(receiveDiagnostics.mixClippedSamples));
+    step('local status reports separate receive counters for overlapping speakers');
+
     if (bridge.env.BRIDGE_VOICE_BACKEND === 'teamspeak-mumble') {
         const teamSpeak = record(bridge, 'wa_mic');
         const continuous = tone(peerB, 600, 6);
@@ -268,6 +284,8 @@ async function main() {
         const peerSession = [...admin.users.values()].find((u) => u.name === 'PeerC').session;
         admin.moveUserToChannel(peerSession, other);
         await until('operator moved accounts', () => user().channelId === other && admin.self.channelId === other);
+        await until('old room receive counters are cleared', async () =>
+            Object.keys((await bridge.control.request('status')).receiveDiagnostics.senders).length === 0);
         await until('status follows the bridge into the new room', async () =>
             (await bridge.control.request('current_channel')).name === 'Other');
         await until('audio arrives in destination', () => power(recordC.pcm(), 600) > 300);
