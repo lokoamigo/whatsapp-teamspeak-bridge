@@ -89,6 +89,9 @@ Für einen Vergleich denselben Satz über Desktop und Telefon sprechen und
 die Zähler direkt danach ablesen. Die [native Mumble-Dokumentation](native/mumble/README.md)
 erläutert die Felder.
 
+`!wa status` zeigt im kombinierten Modus die beiden Voice-Kanäle, den
+Verbindungs- und Audiostatus sowie den WhatsApp-Anrufstatus.
+
 ### Mumble statt TeamSpeak
 
 Für Mumble in `.env` setzen:

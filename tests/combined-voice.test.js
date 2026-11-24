@@ -18,6 +18,7 @@ const { handleWhatsAppMessage } = require('../bot/whatsapp/messages');
 
 test('both listeners authorize, serialize call starts, and reply on the originating server', async (t) => {
     t.mock.method(require('../bot/audio/pulse'), 'refreshWhatsAppMicrophone', async () => {});
+    t.mock.method(require('../bot/audio/pulse'), 'runPactl', async () => '[]');
     t.mock.method(require('../bot/whatsapp/microphone'), 'scheduleWhatsAppCallMicrophoneStabilization', () => {});
     const { runTeamSpeakCommandListener } = require('../bot/teamspeak/command-listener');
     const { runMumbleCommandBot } = require('../bot/mumble/command-listener');
@@ -25,11 +26,16 @@ test('both listeners authorize, serialize call starts, and reply on the originat
     let ts, mumble, active;
     t.mock.method(ClientQuery.prototype, 'connect', async function () {
         ts = this;
+        this.socket = { destroyed: false };
         this.closed = new Promise(() => {});
     });
     t.mock.method(ClientQuery.prototype, 'reply', async (event, text) => tsReplies.push(text));
     t.mock.method(NativeMumbleClient.prototype, 'run', async function () { mumble = this; });
+    t.mock.method(ClientQuery.prototype, 'getOwnClientInfo', async () => ({ cid: '8' }));
+    t.mock.method(ClientQuery.prototype, 'listChannels', async () => [{ id: '8', name: 'Support' }]);
     t.mock.method(NativeMumbleClient.prototype, 'request', async (op, args) => {
+        if (op === 'status') return { connected: true, captureReady: true, playbackReady: true };
+        if (op === 'current_channel') return { id: 3, name: 'Lobby' };
         assert.equal(op, 'send_text');
         mumbleReplies.push(args.text);
     });
@@ -76,6 +82,15 @@ test('both listeners authorize, serialize call starts, and reply on the originat
     assert.deepEqual(adds, [['491701234561@c.us', 'call-1']]);
     assert.match(tsReplies[2], /Started WhatsApp/);
     assert.match(mumbleReplies[1], /invited 1/);
+
+    client.pupPage.evaluate = async () => ({ ready: true });
+    await tsSend('!wa status');
+    mumbleSend('!wa status');
+    await new Promise(setImmediate);
+    assert.match(tsReplies[3], /WhatsApp ready call=active/);
+    assert.match(tsReplies[3], /TeamSpeak connected room="Support"/);
+    assert.match(tsReplies[3], /Mumble connected room="Lobby"/);
+    assert.equal(mumbleHtmlToText(mumbleReplies[2]), tsReplies[3]);
 });
 
 test('WhatsApp channel commands give operator guidance for polls and named moves', async () => {

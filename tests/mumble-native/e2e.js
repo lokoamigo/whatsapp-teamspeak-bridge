@@ -206,6 +206,7 @@ async function main() {
     });
     const initialStatus = JSON.parse(health);
     assert.strictEqual(initialStatus.connected, true);
+    assert.deepStrictEqual(await bridge.control.request('current_channel'), { id: channel, name: 'Bridge' });
     step('independent health probes work while Node owns command control');
 
     await pause(500);
@@ -285,6 +286,8 @@ async function main() {
         await until('operator moved accounts', () => user().channelId === other && admin.self.channelId === other);
         await until('old room receive counters are cleared', async () =>
             Object.keys((await bridge.control.request('status')).receiveDiagnostics.senders).length === 0);
+        await until('status follows the bridge into the new room', async () =>
+            (await bridge.control.request('current_channel')).name === 'Other');
         await until('audio arrives in destination', () => power(recordC.pcm(), 600) > 300);
         await bridge.control.sendChannelMessage('announcement after move');
         await until('destination receives announcement', () => admin.replies.includes('announcement after move'));
