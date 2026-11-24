@@ -114,6 +114,7 @@ async fn serve_peer(stream: UnixStream, service: Arc<Service>, requests: mpsc::S
                                     "transmitting":audio.speaking.load(Relaxed),"receiving":audio.receive.load(Relaxed),
                                 "captured":audio.captured.load(Relaxed),"played":audio.played.load(Relaxed),
                                 "dropped":audio.dropped.load(Relaxed),
+                                "receiveDiagnostics":audio.receive_diagnostics(),
                                 "transport":if audio.udp.load(Relaxed) { "udp" } else { "tcp" }}})
                         } else if control.is_none() {
                             json!({"id":id,"error":"Attach the command controller first"})

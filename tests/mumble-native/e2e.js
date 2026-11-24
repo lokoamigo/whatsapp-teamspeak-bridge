@@ -204,7 +204,8 @@ async function main() {
     const health = execFileSync('/work/native/mumble/target/release/bridge-mumble', ['--status'], {
         env: { ...process.env, MUMBLE_NATIVE_SOCKET: bridge.socket }, encoding: 'utf8',
     });
-    assert.strictEqual(JSON.parse(health).connected, true);
+    const initialStatus = JSON.parse(health);
+    assert.strictEqual(initialStatus.connected, true);
     step('independent health probes work while Node owns command control');
 
     await pause(500);
@@ -234,6 +235,22 @@ async function main() {
     await until('simultaneous speakers mixed into WhatsApp PCM', () => power(recordA.pcm(), 440) > 250 && power(recordA.pcm(), 880) > 250);
     await stop(sendingB); await stop(sendingC);
     step('bidirectional PCM survives Opus/server transport; overlapping speakers mix without a loop');
+
+    const peerSessions = [...admin.users.values()].filter((u) => ['PeerB', 'PeerC'].includes(u.name))
+        .map((u) => u.session);
+    assert.strictEqual(peerSessions.length, 2);
+    const receiveDiagnostics = await until('independent receive counters', async () => {
+        const { receiveDiagnostics: stats } = await bridge.control.request('status');
+        return peerSessions.every((session) => stats.senders[session]?.receivedPackets > 0) && stats;
+    });
+    for (const session of peerSessions) {
+        const stats = receiveDiagnostics.senders[session];
+        for (const key of ['latePackets', 'concealedSamples', 'jitterResets']) {
+            assert.ok(Number.isSafeInteger(stats[key]) && stats[key] >= 0);
+        }
+    }
+    assert.ok(Number.isSafeInteger(receiveDiagnostics.mixClippedSamples));
+    step('local status reports separate receive counters for overlapping speakers');
 
     if (bridge.env.BRIDGE_VOICE_BACKEND === 'teamspeak-mumble') {
         const teamSpeak = record(bridge, 'wa_mic');
@@ -266,6 +283,8 @@ async function main() {
         const peerSession = [...admin.users.values()].find((u) => u.name === 'PeerC').session;
         admin.moveUserToChannel(peerSession, other);
         await until('operator moved accounts', () => user().channelId === other && admin.self.channelId === other);
+        await until('old room receive counters are cleared', async () =>
+            Object.keys((await bridge.control.request('status')).receiveDiagnostics.senders).length === 0);
         await until('audio arrives in destination', () => power(recordC.pcm(), 600) > 300);
         await bridge.control.sendChannelMessage('announcement after move');
         await until('destination receives announcement', () => admin.replies.includes('announcement after move'));

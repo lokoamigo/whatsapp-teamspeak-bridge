@@ -4,9 +4,10 @@ use crate::{
 };
 use bytes::Bytes;
 use mumble_client_protocol::VoicePacket;
+use serde::Serialize;
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::sync::{
-    Arc,
+    Arc, Mutex,
     atomic::{AtomicBool, AtomicU64, Ordering},
 };
 use std::time::{Duration, Instant};
@@ -19,6 +20,8 @@ const MAX_PACKETS: usize = 24;
 const JITTER_DELAY: Duration = Duration::from_millis(120);
 const SEQUENCE_SAMPLES: usize = RATE / 100;
 const MAX_CONCEALMENTS: u8 = 3;
+const DIAGNOSTICS_RETENTION: Duration = Duration::from_secs(60);
+const DIAGNOSTICS_INTERVAL: Duration = Duration::from_millis(250);
 const VOICE_RMS: u64 = 100; // Approximately -50 dBFS; ignore quiet digital noise.
 const VOICE_RELEASE_FRAMES: u8 = 15; // 300 ms keeps gaps between words open.
 
@@ -87,6 +90,50 @@ impl Packet {
     }
 }
 
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SenderDiagnostics {
+    received_packets: u64,
+    late_packets: u64,
+    concealed_samples: u64,
+    jitter_resets: u64,
+    #[serde(skip)]
+    last_packet: Instant,
+}
+
+#[derive(Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReceiveDiagnostics {
+    senders: HashMap<u32, SenderDiagnostics>,
+    mix_clipped_samples: u64,
+}
+
+impl ReceiveDiagnostics {
+    fn sender(&mut self, session: u32, now: Instant) -> &mut SenderDiagnostics {
+        if self.senders.len() >= MAX_SPEAKERS
+            && !self.senders.contains_key(&session)
+            && let Some((&oldest, _)) = self
+                .senders
+                .iter()
+                .min_by_key(|(_, stats)| stats.last_packet)
+        {
+            self.senders.remove(&oldest);
+        }
+        self.senders.entry(session).or_insert(SenderDiagnostics {
+            received_packets: 0,
+            late_packets: 0,
+            concealed_samples: 0,
+            jitter_resets: 0,
+            last_packet: now,
+        })
+    }
+
+    fn expire(&mut self, now: Instant) {
+        self.senders
+            .retain(|_, stats| now.duration_since(stats.last_packet) < DIAGNOSTICS_RETENTION);
+    }
+}
+
 struct Speaker {
     decoder: Decoder,
     packets: BTreeMap<u64, Packet>,
@@ -114,9 +161,16 @@ impl Speaker {
         })
     }
 
-    fn push(&mut self, seq: u64, packet: Packet, now: Instant) {
+    fn push(&mut self, seq: u64, packet: Packet, now: Instant, stats: &mut SenderDiagnostics) {
         // Reject packets already fully played, but retain the tail of a
         // longer packet that arrives after concealment has started.
+        if packet.samples != 0 {
+            stats.received_packets += 1;
+            stats.last_packet = now;
+            if self.playing && seq < self.next {
+                stats.late_packets += 1;
+            }
+        }
         if seq < self.next && (packet.samples == 0 || packet.end(seq) <= self.next) && self.playing
         {
             return;
@@ -131,7 +185,7 @@ impl Speaker {
         self.packets.entry(seq).or_insert(packet);
     }
 
-    fn render(&mut self, now: Instant, mixed: &mut [i32; FRAME]) {
+    fn render(&mut self, now: Instant, mixed: &mut [i32; FRAME], stats: &mut SenderDiagnostics) {
         if now < self.ready {
             return;
         }
@@ -158,6 +212,7 @@ impl Speaker {
                 self.ended = packet.last;
             } else {
                 if self.missing >= MAX_CONCEALMENTS {
+                    stats.jitter_resets += 1;
                     // Rebuffer from packets that are already queued. A lost
                     // packet must never discard the rest of the talk burst.
                     if let Some((&seq, _)) = self.packets.first_key_value() {
@@ -176,6 +231,7 @@ impl Speaker {
                     .map_or(2, |(&seq, _)| (seq - self.next).min(2));
                 let samples = units as usize * SEQUENCE_SAMPLES;
                 if let Ok(concealed) = self.decoder.decode(None, samples) {
+                    stats.concealed_samples += concealed.len() as u64;
                     self.pcm.extend(concealed);
                 }
                 self.next = self.next.saturating_add(units);
@@ -190,11 +246,13 @@ impl Speaker {
 
 pub struct Mixer {
     speakers: HashMap<u32, Speaker>,
+    diagnostics: ReceiveDiagnostics,
 }
 impl Mixer {
     pub fn new() -> Self {
         Self {
             speakers: HashMap::new(),
+            diagnostics: ReceiveDiagnostics::default(),
         }
     }
     pub fn clear(&mut self) {
@@ -234,6 +292,7 @@ impl Mixer {
                     samples,
                 },
                 now,
+                self.diagnostics.sender(packet.session, now),
             );
         }
     }
@@ -241,10 +300,21 @@ impl Mixer {
         self.speakers
             .retain(|_, speaker| now.duration_since(speaker.heard) < Duration::from_secs(2));
         let mut mixed = [0i32; FRAME];
-        for speaker in self.speakers.values_mut() {
-            speaker.render(now, &mut mixed);
+        for (&session, speaker) in &mut self.speakers {
+            speaker.render(
+                now,
+                &mut mixed,
+                self.diagnostics.sender(session, speaker.heard),
+            );
         }
-        mixed.map(|sample| sample.clamp(i16::MIN as i32, i16::MAX as i32) as i16)
+        let mut clipped = 0;
+        let pcm = mixed.map(|sample| {
+            let clamped = sample.clamp(i16::MIN as i32, i16::MAX as i32);
+            clipped += u64::from(clamped != sample);
+            clamped as i16
+        });
+        self.diagnostics.mix_clipped_samples += clipped;
+        pcm
     }
 }
 
@@ -262,6 +332,23 @@ pub struct AudioState {
     pub udp: AtomicBool,
     pub failed: AtomicBool,
     stopped: AtomicBool,
+    receive_diagnostics: Mutex<Option<(u64, ReceiveDiagnostics)>>,
+}
+
+impl AudioState {
+    pub fn receive_diagnostics(&self) -> ReceiveDiagnostics {
+        let generation = self.generation.load(Ordering::Relaxed);
+        self.receive_diagnostics
+            .lock()
+            .ok()
+            .and_then(|snapshot| {
+                snapshot
+                    .as_ref()
+                    .filter(|(current, _)| *current == generation)
+                    .map(|(_, diagnostics)| diagnostics.clone())
+            })
+            .unwrap_or_default()
+    }
 }
 
 pub struct Audio {
@@ -410,6 +497,7 @@ impl Audio {
             };
             let mut stream = None;
             let mut mixer = Mixer::new();
+            let mut next_snapshot = Instant::now();
             let mut last_error = None;
             let mut generation = state.generation.load(Ordering::Relaxed);
             while !state.stopped.load(Ordering::Relaxed) {
@@ -431,7 +519,9 @@ impl Audio {
                 let current = state.generation.load(Ordering::Relaxed);
                 if generation != current {
                     mixer.clear();
+                    mixer.diagnostics = ReceiveDiagnostics::default();
                     generation = current;
+                    next_snapshot = now;
                 }
                 for _ in 0..64 {
                     let Ok((packet_generation, packet)) = in_rx.try_recv() else {
@@ -440,7 +530,9 @@ impl Audio {
                     let current = state.generation.load(Ordering::Relaxed);
                     if generation != current {
                         mixer.clear();
+                        mixer.diagnostics = ReceiveDiagnostics::default();
                         generation = current;
+                        next_snapshot = now;
                     }
                     if packet_generation == generation && state.receive.load(Ordering::Relaxed) {
                         mixer.push(packet, now);
@@ -450,6 +542,14 @@ impl Audio {
                     mixer.clear();
                 }
                 let pcm = mixer.render(now);
+                if now >= next_snapshot {
+                    mixer.diagnostics.expire(now);
+                    // Keep the playback thread independent of socket readers.
+                    if let Ok(mut snapshot) = state.receive_diagnostics.try_lock() {
+                        *snapshot = Some((generation, mixer.diagnostics.clone()));
+                        next_snapshot = now + DIAGNOSTICS_INTERVAL;
+                    }
+                }
                 if stream
                     .as_mut()
                     .expect("playback opened")
@@ -664,6 +764,11 @@ mod tests {
         assert_eq!(mixer.speakers[&1].next, 12);
         assert_eq!(mixer.speakers[&1].pcm.len(), FRAME);
         assert!(mixer.speakers[&1].ended);
+        let stats = &mixer.diagnostics.senders[&1];
+        assert_eq!(stats.received_packets, 2);
+        assert_eq!(stats.late_packets, 1);
+        assert_eq!(stats.concealed_samples, FRAME as u64);
+        assert_eq!(stats.jitter_resets, 0);
     }
 
     #[test]
@@ -685,6 +790,39 @@ mod tests {
         mixer.render(start + tick * 4 + JITTER_DELAY);
         assert_eq!(mixer.speakers[&1].next, 12);
         assert!(mixer.speakers[&1].packets.contains_key(&12));
+        let stats = &mixer.diagnostics.senders[&1];
+        assert_eq!(stats.concealed_samples, (FRAME * 3) as u64);
+        assert_eq!(stats.jitter_resets, 1);
+    }
+
+    #[test]
+    fn receive_diagnostics_report_only_mix_clipping_and_recent_senders() {
+        let now = Instant::now();
+        let mut mixer = Mixer::new();
+        for session in [11, 17] {
+            let mut speaker = Speaker::new(0, now).unwrap();
+            speaker.pcm.extend([20_000; FRAME]);
+            speaker.ended = true;
+            mixer.speakers.insert(session, speaker);
+            mixer.diagnostics.sender(session, now).received_packets = 1;
+        }
+        assert_eq!(mixer.render(now + JITTER_DELAY), [i16::MAX; FRAME]);
+        let snapshot = serde_json::to_value(&mixer.diagnostics).unwrap();
+        assert_eq!(snapshot["mixClippedSamples"], FRAME);
+        for session in ["11", "17"] {
+            let stats = &snapshot["senders"][session];
+            assert_eq!(stats["receivedPackets"], 1);
+            assert_eq!(stats["latePackets"], 0);
+            assert_eq!(stats["concealedSamples"], 0);
+            assert_eq!(stats["jitterResets"], 0);
+            assert!(stats.get("lastPacket").is_none());
+        }
+        for session in 100..200 {
+            mixer.diagnostics.sender(session, now);
+        }
+        assert_eq!(mixer.diagnostics.senders.len(), MAX_SPEAKERS);
+        mixer.diagnostics.expire(now + DIAGNOSTICS_RETENTION);
+        assert!(mixer.diagnostics.senders.is_empty());
     }
 
     #[test]

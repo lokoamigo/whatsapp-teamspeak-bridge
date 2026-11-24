@@ -83,6 +83,12 @@ auf. Beide Server unterstützen die bestehenden `!wa`-Befehle. Antworten gehen
 privat an den Absender auf demselben Server. Gewöhnliche Chatnachrichten bleiben
 im jeweiligen Dienst.
 
+Bei verzerrtem Mumble-Ton zeigt `docker compose exec bridge bridge-mumble --status`
+Empfangszähler je Mumble-Sitzung und Übersteuerungen in der Mumble-Mischung.
+Für einen Vergleich denselben Satz über Desktop und Telefon sprechen und
+die Zähler direkt danach ablesen. Die [native Mumble-Dokumentation](native/mumble/README.md)
+erläutert die Felder.
+
 ### Mumble statt TeamSpeak
 
 Für Mumble in `.env` setzen:
