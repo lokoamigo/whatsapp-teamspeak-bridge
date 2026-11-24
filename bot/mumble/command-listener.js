@@ -20,7 +20,7 @@ const { createMumbleChannelControl } = require('./channels');
 const { createMumbleCommandBot, getMumbleBotConfig } = require('./commands');
 const { createNativeMumbleControl } = require('./native');
 
-async function runMumbleCommandBot(waClient) {
+async function runMumbleCommandBot(waClient, { chatRelay } = {}) {
     if (MUMBLE_CLIENT === 'native') {
         const client = createNativeMumbleControl({
             socketPath: MUMBLE_NATIVE_SOCKET,
@@ -31,6 +31,7 @@ async function runMumbleCommandBot(waClient) {
             handleCommand: (args) => handleCommand(waClient, args),
         });
         state.voiceChannels.mumble = client;
+        if (chatRelay) client.on('text', (event) => chatRelay.fromMumble(event));
         await client.run();
         return;
     }

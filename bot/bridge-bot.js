@@ -10,9 +10,10 @@
 //   audio/pulse.js         PulseAudio helpers
 //   api/server.js          local HTTP API
 
-const { CALL_ANNOUNCEMENTS, COMBINED_VOICE, VOICE_BACKEND } = require('./config');
+const { CALL_ANNOUNCEMENTS, CHAT_RELAY, COMBINED_VOICE, COMMAND_PREFIX, VOICE_BACKEND } = require('./config');
 const { createApiServer } = require('./api/server');
 const { startAudioRouter } = require('./audio/router');
+const { createChatRelay } = require('./chat-relay');
 const { runMumbleCommandBot } = require('./mumble/command-listener');
 const { runTeamSpeakCommandListener } = require('./teamspeak/command-listener');
 const { startCallAnnouncements } = require('./whatsapp/call-announcements');
@@ -58,7 +59,11 @@ async function main() {
     if (CALL_ANNOUNCEMENTS) startCallAnnouncements(waClient);
 
     if (COMBINED_VOICE) {
-        await Promise.all([runTeamSpeakCommandListener(waClient), runMumbleCommandBot(waClient)]);
+        const chatRelay = CHAT_RELAY ? createChatRelay({ commandPrefix: COMMAND_PREFIX }) : undefined;
+        await Promise.all([
+            runTeamSpeakCommandListener(waClient, { chatRelay }),
+            runMumbleCommandBot(waClient, { chatRelay }),
+        ]);
         return;
     }
     if (VOICE_BACKEND === 'mumble') {
