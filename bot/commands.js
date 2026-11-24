@@ -2,7 +2,7 @@
 
 // `!wa ...` command set shared by the TeamSpeak and Mumble chat listeners.
 
-const { COMMAND_PREFIX, COMMANDER_UIDS } = require('./config');
+const { COMMAND_PREFIX, COMMANDER_UIDS, COMBINED_VOICE } = require('./config');
 const state = require('./state');
 const { parseArgs } = require('./util');
 const {
@@ -27,18 +27,8 @@ const {
     whatsappStatusText,
 } = require('./whatsapp/readiness');
 
-const BARE_COMMANDS = new Set([
-    'help',
-    'status',
-    'add',
-    'accept',
-    'answer',
-    'call',
-    'callgroup',
-    'groupcall',
-    'hangup',
-    'end',
-]);
+const CALL_COMMANDS = new Set(['add', 'accept', 'answer', 'call', 'callgroup', 'groupcall', 'hangup', 'end']);
+const BARE_COMMANDS = new Set(['help', 'status', ...CALL_COMMANDS]);
 
 function extractCommand(message) {
     const trimmed = String(message || '').trim();
@@ -63,7 +53,24 @@ function assertCommander(event) {
     }
 }
 
-async function handleCommand(waClient, args) {
+let callCommandQueue = Promise.resolve();
+let pendingCallCommands = 0;
+
+function handleCommand(waClient, args) {
+    if (!COMBINED_VOICE || !CALL_COMMANDS.has(args[0]?.toLowerCase())) {
+        return executeCommand(waClient, args);
+    }
+    if (pendingCallCommands >= 8) {
+        return Promise.reject(new Error('The WhatsApp bridge is busy; please retry.'));
+    }
+    pendingCallCommands++;
+    const result = callCommandQueue.then(() => executeCommand(waClient, args))
+        .finally(() => { pendingCallCommands--; });
+    callCommandQueue = result.catch(() => {});
+    return result;
+}
+
+async function executeCommand(waClient, args) {
     const command = (args.shift() || 'help').toLowerCase();
 
     if (command === 'help') {
@@ -140,6 +147,9 @@ async function handleCommand(waClient, args) {
         const contactIds = resolveCallTargets(args);
         if (contactIds.length < 2) {
             throw new Error('A WhatsApp group call needs at least two individual participants.');
+        }
+        if (COMBINED_VOICE && await getActiveWhatsAppCallId(waClient)) {
+            throw new Error('A WhatsApp call is active. Use the add command to invite participants.');
         }
         await grantWhatsAppMicrophonePermission(waClient, 'group call start');
         await ensureWhatsAppIsMeAccountShim(waClient);

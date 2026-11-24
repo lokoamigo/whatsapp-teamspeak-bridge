@@ -10,16 +10,17 @@
 //   sendChannelMessage(text): Promise<void>
 //       posts a chat message to the bridge client's current channel
 
-const { VOICE_BACKEND_LABEL } = require('./config');
+const { VOICE_BACKEND, VOICE_BACKEND_LABEL } = require('./config');
 const state = require('./state');
 
 function requireVoiceChannels() {
-    if (!state.voiceChannels) {
+    const control = state.voiceChannels[VOICE_BACKEND];
+    if (!control) {
         throw new Error(
             `${VOICE_BACKEND_LABEL} channel switching is not available: the ${VOICE_BACKEND_LABEL} command connection is not configured.`,
         );
     }
-    return state.voiceChannels;
+    return control;
 }
 
 function findChannelByName(channels, requestedName) {

@@ -46,7 +46,7 @@ ENV DISPLAY=:99 \
     LANG=C.UTF-8 \
     LC_ALL=C.UTF-8
 
-RUN case "$BRIDGE_VOICE_BACKEND" in teamspeak|mumble) ;; *) echo >&2 "BRIDGE_VOICE_BACKEND must be teamspeak or mumble"; exit 1 ;; esac; \
+RUN case "$BRIDGE_VOICE_BACKEND" in teamspeak|mumble|teamspeak-mumble) ;; *) echo >&2 "Unknown BRIDGE_VOICE_BACKEND"; exit 1 ;; esac; \
     test "$BRIDGE_VOICE_BACKEND" = "mumble" || test "$TS3_LICENSE_ACCEPTED" = "YES" || \
     (echo >&2 "Build abgebrochen: TeamSpeak-Lizenz zuerst lesen und mit --build-arg TS3_LICENSE_ACCEPTED=YES bestätigen."; exit 1)
 
@@ -128,8 +128,8 @@ EXPOSE 6080 25640
 HEALTHCHECK --interval=30s --timeout=5s --start-period=45s --retries=3 \
   CMD curl -fsS http://127.0.0.1:6080/vnc.html >/dev/null \
    && curl -fsS http://127.0.0.1:9222/json/version >/dev/null \
-   && { test "$BRIDGE_VOICE_BACKEND" != mumble \
-        || test "${BRIDGE_MUMBLE_CLIENT:-gui}" != native \
-        || /usr/local/bin/bridge-mumble --status >/dev/null; } || exit 1
+   && case "$BRIDGE_VOICE_BACKEND:${BRIDGE_MUMBLE_CLIENT:-gui}" in \
+        teamspeak-mumble:*|mumble:native) /usr/local/bin/bridge-mumble --status >/dev/null ;; \
+        *) true ;; esac || exit 1
 
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/container-entrypoint"]

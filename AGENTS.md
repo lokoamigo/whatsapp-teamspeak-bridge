@@ -8,6 +8,11 @@ Dieses Projekt baut einen einzelnen Docker-Container als WhatsApp-Web-zu-TeamSpe
 
 Der Node-Bot in `bot/bridge-bot.js` ist der Besitzer der sichtbaren Chromium-Instanz. Keine zweite Selenium-, ChromeDriver- oder parallele Browsersteuerung einfuehren.
 
+`BRIDGE_VOICE_BACKEND=teamspeak-mumble` verbindet beide Voice-Kanaele und WhatsApp.
+PulseAudio laedt die sechs Kreuzverbindungen aus `bot/audio/graph.js`. TeamSpeak
+und ClientQuery laufen zusammen mit dem nativen Mumble-Client. Kanalwechsel
+erfolgen durch Server-Operatoren. Audio-Test: `bash tests/audio-routing/run.sh`.
+
 `BRIDGE_VOICE_BACKEND=mumble` waehlt alternativ den Mumble-Client statt TeamSpeak.
 `BRIDGE_MUMBLE_CLIENT=native` ersetzt die GUI und den separaten Bot durch
 `native/mumble` (Rust, eine Audio-/Chat-Verbindung). Standard bleibt `gui`.
@@ -51,7 +56,7 @@ keinen TeamSpeak-Client und benoetigen dessen Lizenzbestaetigung nicht.
 - `bot/config.js` / `bot/state.js`: Alle Umgebungsvariablen (einmalig geparst) und der gemeinsame Laufzeitzustand.
 - `bot/commands.js`: `!wa`-Befehlssatz, gemeinsam fuer TeamSpeak und Mumble. `bot/contacts.js`: Nummern-Normalisierung und Kontaktgruppen.
 - `bot/whatsapp/`: `client.js` (einziger Chromium-Besitzer, Event-Verdrahtung), `calls.js` (Anrufe, Auto-Accept), `microphone.js` (In-Call-Mikrofonwahl), `readiness.js`, `messages.js` (`!invite`), `channel-polls.js` + `poll-vote-hook.js` (`!switchChannel`), `call-activity.js` + `call-announcements.js` (Join-/Leave-Hinweise im Voice-Kanal).
-- `bot/voice-channels.js`: Backend-neutrale Kanalwahl fuer `!switchChannel`; das aktive Backend registriert seine Kanalsteuerung in `state.voiceChannels`.
+- `bot/voice-channels.js`: Backend-neutrale Kanalwahl fuer `!switchChannel`; das aktive Backend registriert seine Kanalsteuerung in `state.voiceChannels` unter dem Backend-Namen.
 - `bot/teamspeak/`: `client-query.js` (ClientQuery-Verbindung), `protocol.js` (Escaping/Parsing), `channels.js` (Kanalsteuerung), `command-listener.js`.
 - `bot/mumble/`: Mumble-Protokoll-Client, Befehls-Bot, dessen Start und `channels.js` (verschiebt den Bridge-Nutzer; der Bot-Nutzer braucht die ACL-Berechtigung Move).
 - `bot/audio/router.js`: Ereignisgesteuertes Audio-Routing im vorhandenen Node-Prozess (`pactl subscribe`, langsamer Reparatur-Check). Kein eigener Supervisor-Dienst.

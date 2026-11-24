@@ -7,6 +7,7 @@
 const { Poll } = require('whatsapp-web.js');
 const {
     CHANNEL_POLL_MAX_OPTIONS,
+    COMBINED_VOICE,
     SHOW_MORE_CHANNELS_OPTION,
     WHATSAPP_SWITCH_CHANNEL_COMMAND,
     WHATSAPP_SWITCH_CHANNEL_COMMAND_TYPO,
@@ -233,6 +234,10 @@ async function sendChannelSwitchPoll(client, chatId, requestedBy, page = 0) {
 }
 
 async function handleWhatsAppSwitchChannelCommand(client, message, command) {
+    if (COMBINED_VOICE) {
+        await message.reply('A server operator can move the bridge user to the desired channel in TeamSpeak or Mumble.');
+        return;
+    }
     const chatId = message.from;
     const requestedBy = getMessageSenderId(message);
     console.log(

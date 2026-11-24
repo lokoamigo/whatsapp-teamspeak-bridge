@@ -30,7 +30,7 @@ async function runMumbleCommandBot(waClient) {
             parseArgs,
             handleCommand: (args) => handleCommand(waClient, args),
         });
-        state.voiceChannels = client;
+        state.voiceChannels.mumble = client;
         await client.run();
         return;
     }
@@ -55,7 +55,7 @@ async function runMumbleCommandBot(waClient) {
         parseArgs,
         handleCommand: (args) => handleCommand(waClient, args),
     });
-    state.voiceChannels = createMumbleChannelControl({
+    state.voiceChannels.mumble = createMumbleChannelControl({
         getClient: () => bot.client,
         bridgeUsername: config.bridgeUsername,
         botUsername: config.username,

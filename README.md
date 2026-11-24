@@ -4,9 +4,9 @@ Ein einzelner Linux-Container mit:
 
 - Chromium + WhatsApp Web
 - TeamSpeak 3 Client 3.6.2
-- alternativ Mumble als Voice-Backend (`BRIDGE_VOICE_BACKEND=mumble`)
+- Mumble als Alternative oder gemeinsam mit TeamSpeak
 - ClientQuery-Plugin als Bot-/Fernsteuerungsschnittstelle
-- zwei gekreuzten virtuellen PulseAudio-Geräten
+- virtuellen PulseAudio-Geräten für Wiedergabe und Aufnahme
 - noVNC-Weboberfläche für QR-Code und GUI
 - persistentem Docker-Volume für WhatsApp-Login und Voice-Client-Konfiguration
 
@@ -52,6 +52,36 @@ TS3_URI=ts3server://ts.example.org?port=9987&nickname=WhatsAppBridge
 ```
 
 Passwörter, Channel-Namen und Sonderzeichen müssen in der URI URL-kodiert werden. Alternativ später im GUI verbinden und als Bookmark mit Auto-Connect speichern.
+
+### TeamSpeak und Mumble gleichzeitig verbinden
+
+Mit `BRIDGE_VOICE_BACKEND=teamspeak-mumble` verbindet die Bridge den aktuellen
+TeamSpeak-Kanal mit dem aktuellen Mumble-Kanal, sobald beide Clients verbunden
+sind. Ein WhatsApp-Anruf kommt als dritter Teilnehmer hinzu. Auch während der
+QR-Anmeldung und nach dem Auflegen können die beiden Voice-Kanäle miteinander
+sprechen.
+
+Für diesen Modus in `.env` die TeamSpeak-Lizenzbestätigung wie oben setzen,
+`TS3_URI` und `MUMBLE_URI` mit den gewünschten Startkanälen eintragen und mit
+`make restart` bauen und starten. Die Bridge verwendet automatisch den nativen
+Mumble-Client und die gespeicherten Identitäten. Der TeamSpeak-Desktop bleibt
+über noVNC erreichbar. Für freihändiges Sprechen im TeamSpeak-Aufnahmeprofil
+Sprachaktivierung wählen.
+
+| Client | Wiedergabe | Aufnahme | Hörbare Gegenstellen |
+|---|---|---|---|
+| TeamSpeak | `ts_out` | `wa_mic` | Mumble und WhatsApp |
+| Mumble | `mumble_out` | `mumble_mic` | TeamSpeak und WhatsApp |
+| WhatsApp | `wa_out` | `ts_mic` | TeamSpeak und Mumble |
+
+Server-Operatoren können jeden Bridge-Nutzer unabhängig in einen anderen Kanal
+verschieben. Audio und aktivierte Anruf-Hinweise folgen dem jeweiligen Nutzer.
+`!switchChannel` in WhatsApp erklärt diese Kanalwahl. Für TeamSpeak-Befehle
+und -Hinweise den ClientQuery-API-Key einrichten. `BRIDGE_COMMANDER_UIDS` nimmt
+TeamSpeak-UIDs und Mumble-Zertifikathashes gemeinsam als kommagetrennte Liste
+auf. Beide Server unterstützen die bestehenden `!wa`-Befehle. Antworten gehen
+privat an den Absender auf demselben Server. Gewöhnliche Chatnachrichten bleiben
+im jeweiligen Dienst.
 
 ### Mumble statt TeamSpeak
 
@@ -258,7 +288,7 @@ Platz `DISPLAY_WIDTH`/`DISPLAY_HEIGHT` in `.env` erhöhen und `make restart`
 ausführen. In noVNC über **Settings → Scaling mode → Local Scaling** den
 gesamten Desktop einpassen.
 
-## 4. TeamSpeak einrichten (nur TeamSpeak-Backend)
+## 4. TeamSpeak einrichten (auch im kombinierten Modus)
 
 Der Client startet parallel im selben noVNC-Desktop.
 
@@ -491,7 +521,7 @@ den laufenden Anruf ein. Ist kein Anruf aktiv, passiert nichts. In
 WhatsApp-Gruppenchats wird der tatsächliche Nachrichtensender eingeladen, nicht
 die Gruppe.
 
-`!switchChannel` erstellt eine WhatsApp-Umfrage mit den Kanälen des
+Bei einem einzelnen Voice-Backend erstellt `!switchChannel` eine WhatsApp-Umfrage mit den Kanälen des
 Voice-Backends (TeamSpeak oder Mumble) außer dem aktuell aktiven Kanal des
 Bridge-Clients. Ist die Auswahl durch
 `BRIDGE_WHATSAPP_CHANNEL_POLL_MAX_OPTIONS` begrenzt, enthält die Umfrage als
@@ -715,6 +745,10 @@ Regressionstests: `npm test`. Für den Audio-Router zusätzlich nach einem
 Image-Build `bash tests/audio-routing/run.sh` ausführen. Der Test verwendet
 einen isolierten Container ohne Netzwerk und ohne persistentes Profil und
 prüft Routing, Mikrofon-Nudge, Gerätereparatur und PulseAudio-Neustart.
+Der Dreiton-Test misst in jedem Mikrofon die beiden Gegenstellen und den
+Ausschluss der eigenen Wiedergabe. Mit einem TeamSpeak-fähigen Image prüft
+`bash tests/voice-backends/run.sh` den Compose- und Supervisor-Start für
+TeamSpeak, Mumble (GUI und nativ) und den kombinierten Betrieb.
 Mit `BRIDGE_TEST_IMAGE` lässt sich ein anderes kompatibles Bridge-Image wählen.
 
 Nach dem Aktualisieren der Dateien ist ein Image-Neubau erforderlich:
