@@ -83,6 +83,9 @@ auf. Beide Server unterstützen die bestehenden `!wa`-Befehle. Antworten gehen
 privat an den Absender auf demselben Server. Gewöhnliche Chatnachrichten bleiben
 im jeweiligen Dienst.
 
+`!wa status` zeigt im kombinierten Modus die beiden Voice-Kanäle, den
+Verbindungs- und Audiostatus sowie den WhatsApp-Anrufstatus.
+
 ### Mumble statt TeamSpeak
 
 Für Mumble in `.env` setzen:

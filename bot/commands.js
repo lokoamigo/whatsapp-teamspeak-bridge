@@ -4,6 +4,7 @@
 
 const { COMMAND_PREFIX, COMMANDER_UIDS, COMBINED_VOICE } = require('./config');
 const state = require('./state');
+const { bridgeStatusText } = require('./voice-status');
 const { parseArgs } = require('./util');
 const {
     contactGroupsText,
@@ -88,6 +89,7 @@ async function executeCommand(waClient, args) {
     }
 
     if (command === 'status') {
+        if (COMBINED_VOICE) return bridgeStatusText(waClient);
         await refreshWhatsAppReady(waClient).catch((error) => {
             state.whatsapp = { ready: false, reason: error.message };
         });

@@ -43,6 +43,21 @@ fn channels(handle: &Handle) -> Value {
     })
 }
 
+fn current_channel(handle: &Handle) -> Result<Value> {
+    handle.with_state(|state| {
+        let id = state
+            .own_user()
+            .context("Own channel is unavailable")?
+            .channel_id;
+        let channel = state.channels.get(&id);
+        let name = channel
+            .map(|channel| channel.name.as_str())
+            .filter(|name| !name.is_empty())
+            .or((id == 0).then_some("Root"));
+        Ok(json!({ "id": id, "name": name }))
+    })
+}
+
 fn resolve_channel(handle: &Handle, path: &[String]) -> Result<Option<u32>> {
     if path.is_empty() {
         return Ok(None);
@@ -129,6 +144,7 @@ fn rpc(rpc: ipc::Rpc, handle: &Handle, pending: &mut Option<PendingMove>) {
     let result = (|| -> Result<Value> {
         match request.op.as_str() {
             "channels" => Ok(channels(handle)),
+            "current_channel" => current_channel(handle),
             "send_text" | "send_channel" => {
                 let text = request.text.context("Missing message")?;
                 if text.len() > 16000 {
