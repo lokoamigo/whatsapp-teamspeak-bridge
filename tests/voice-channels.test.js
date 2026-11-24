@@ -4,6 +4,7 @@ const assert = require('assert');
 const EventEmitter = require('events');
 const test = require('node:test');
 const { createMumbleChannelControl, isMoveDenial } = require('../bot/mumble/channels');
+const { VOICE_BACKEND } = require('../bot/config');
 const state = require('../bot/state');
 const { switchToChannelByName } = require('../bot/voice-channels');
 
@@ -157,8 +158,8 @@ test('only move-related permission denials count as move failures', () => {
 
 test('switchToChannelByName uses the registered backend and matches names exactly', async () => {
     const moved = [];
-    const previous = state.voiceChannels;
-    state.voiceChannels = {
+    const previous = state.voiceChannels[VOICE_BACKEND];
+    state.voiceChannels[VOICE_BACKEND] = {
         listSwitchableChannels: async () => [
             { id: 2, name: 'Lobby' },
             { id: 3, name: 'Talk' },
@@ -172,9 +173,9 @@ test('switchToChannelByName uses the registered backend and matches names exactl
         await assert.rejects(switchToChannelByName('Talk'), /ambiguous/);
         await assert.rejects(switchToChannelByName('Lob'), /not found or already active/);
 
-        state.voiceChannels = null;
+        state.voiceChannels[VOICE_BACKEND] = null;
         await assert.rejects(switchToChannelByName('Lobby'), /channel switching is not available/);
     } finally {
-        state.voiceChannels = previous;
+        state.voiceChannels[VOICE_BACKEND] = previous;
     }
 });

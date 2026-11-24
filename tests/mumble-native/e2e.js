@@ -71,8 +71,12 @@ async function audioFixture(name, uri, handler) {
     fs.mkdirSync(path.join(runtime, 'pulse'), { recursive: true, mode: 0o700 });
     const fixture = { directory, data: path.join(directory, 'data'), socket: path.join(runtime, 'control.sock'),
         env: { XDG_RUNTIME_DIR: runtime, PULSE_SERVER: `unix:${runtime}/pulse/native` }, config: path.join(directory, 'bridge.pa') };
-    fs.writeFileSync(fixture.config, fs.readFileSync('/work/rootfs/etc/pulse/bridge.pa', 'utf8')
-        .replace('/tmp/runtime-bridge/pulse/native', `${runtime}/pulse/native`));
+    const combined = name === 'bridge' && process.env.BRIDGE_TEST_THREE_WAY === '1';
+    if (combined) fixture.env.BRIDGE_VOICE_BACKEND = 'teamspeak-mumble';
+    const graph = combined
+        ? execFileSync(process.execPath, [require.resolve('../../bot/audio/graph')], { encoding: 'utf8' })
+        : fs.readFileSync('/work/rootfs/etc/pulse/bridge.pa', 'utf8');
+    fs.writeFileSync(fixture.config, graph.replace('/tmp/runtime-bridge/pulse/native', `${runtime}/pulse/native`));
     pulse(fixture);
     if (name === 'bridge') {
         const identity = await ensureClientCertificate(path.join(directory, 'original'), 'OriginalVoiceIdentity');
@@ -230,6 +234,31 @@ async function main() {
     await until('simultaneous speakers mixed into WhatsApp PCM', () => power(recordA.pcm(), 440) > 250 && power(recordA.pcm(), 880) > 250);
     await stop(sendingB); await stop(sendingC);
     step('bidirectional PCM survives Opus/server transport; overlapping speakers mix without a loop');
+
+    if (bridge.env.BRIDGE_VOICE_BACKEND === 'teamspeak-mumble') {
+        // The operator moves the bridge while audio is live. Peer B stays
+        // behind and peer C follows the operator into the destination room.
+        const ongoing = tone(bridge, 600, 12);
+        const recordC = record(peerC);
+        await until('old room hears ongoing audio', () => power(recordB.pcm(), 600) > 300);
+        admin.moveUserToChannel(user().session, other);
+        admin.moveUserToChannel(admin.session, other);
+        const peerSession = [...admin.users.values()].find((u) => u.name === 'PeerC').session;
+        admin.moveUserToChannel(peerSession, other);
+        await until('operator moved accounts', () => user().channelId === other && admin.self.channelId === other);
+        await until('audio arrives in destination', () => power(recordC.pcm(), 600) > 300);
+        await bridge.control.sendChannelMessage('announcement after move');
+        await until('destination receives announcement', () => admin.replies.includes('announcement after move'));
+        await pause(1500);
+        assert.ok(power(recordB.pcm(), 600) < 150, 'old room no longer receives audio');
+        assert.ok(power(recordC.pcm(), 600) > 300, 'bridge still transmitting in destination');
+        assert.ok(!commander.replies.includes('announcement after move'), 'old room receives no announcement');
+        await stop(ongoing);
+        await stop(recordC.child);
+        admin.moveUserToChannel(user().session, channel);
+        await until('operator returned bridge', () => user().channelId === channel);
+        step('server-side move redirects live audio and announcements away from the old room');
+    }
 
     await bridge.control.moveToChannel({ id: other });
     await until('native self-move', () => user().channelId === other);

@@ -11,7 +11,7 @@ const { teamSpeakChannels } = require('./channels');
 const { ClientQuery } = require('./client-query');
 
 async function runTeamSpeakCommandListener(waClient) {
-    state.voiceChannels = teamSpeakChannels;
+    state.voiceChannels.teamspeak = teamSpeakChannels;
 
     if (!TS_API_KEY) {
         console.log('TS3_CLIENTQUERY_API_KEY is not set; WhatsApp is running without TeamSpeak command control.');

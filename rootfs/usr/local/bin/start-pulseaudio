@@ -9,6 +9,12 @@ rm -f \
   "${XDG_RUNTIME_DIR}/pulse/native" \
   "${XDG_RUNTIME_DIR}/pulse/pid"
 
+config=/etc/pulse/bridge.pa
+if [[ ${BRIDGE_VOICE_BACKEND:-teamspeak} == teamspeak-mumble ]]; then
+  config="$XDG_RUNTIME_DIR/three-way.pa"
+  node /opt/whatsapp-teamspeak-bridge/bot/audio/graph.js > "$config"
+fi
+
 # Keine Echtzeit-/Nice-Anforderungen und keine Desktop-/Hardware-Erkennung.
 exec /usr/bin/pulseaudio \
   -n \
@@ -19,4 +25,4 @@ exec /usr/bin/pulseaudio \
   --realtime=no \
   --log-target=stderr \
   --log-level=notice \
-  --file=/etc/pulse/bridge.pa
+  --file="$config"

@@ -3,31 +3,35 @@ set -euo pipefail
 
 export BRIDGE_VOICE_BACKEND="${BRIDGE_VOICE_BACKEND:-teamspeak}"
 export BRIDGE_MUMBLE_CLIENT="${BRIDGE_MUMBLE_CLIENT:-gui}"
+if [[ "$BRIDGE_VOICE_BACKEND" == teamspeak-mumble ]]; then
+  export BRIDGE_MUMBLE_CLIENT=native
+fi
 case "$BRIDGE_MUMBLE_CLIENT" in
   gui|native) ;;
   *) echo >&2 "BRIDGE_MUMBLE_CLIENT must be gui or native."; exit 1 ;;
 esac
 export BRIDGE_MUMBLE_NATIVE_AUTOSTART=false
 case "$BRIDGE_VOICE_BACKEND" in
-  teamspeak)
+  teamspeak|teamspeak-mumble)
     if [[ ! -x /opt/teamspeak3/ts3client_runscript.sh ]]; then
-      echo >&2 "TeamSpeak is not installed. Rebuild with BRIDGE_VOICE_BACKEND=teamspeak."
+      echo >&2 "TeamSpeak is not installed. Rebuild with BRIDGE_VOICE_BACKEND=$BRIDGE_VOICE_BACKEND."
       exit 1
     fi
     export BRIDGE_TEAMSPEAK_AUTOSTART=true BRIDGE_MUMBLE_AUTOSTART=false
     ;;
   mumble)
     export BRIDGE_TEAMSPEAK_AUTOSTART=false BRIDGE_MUMBLE_AUTOSTART=true
-    if [[ "$BRIDGE_MUMBLE_CLIENT" == native ]]; then
-      [[ -n "${MUMBLE_URI:-}" ]] || { echo >&2 "Native Mumble requires MUMBLE_URI."; exit 1; }
-      export BRIDGE_MUMBLE_AUTOSTART=false BRIDGE_MUMBLE_NATIVE_AUTOSTART=true
-    fi
     ;;
   *)
-    echo >&2 "BRIDGE_VOICE_BACKEND must be teamspeak or mumble."
+    echo >&2 "BRIDGE_VOICE_BACKEND must be teamspeak, mumble or teamspeak-mumble."
     exit 1
     ;;
 esac
+
+if [[ "$BRIDGE_VOICE_BACKEND" != teamspeak && "$BRIDGE_MUMBLE_CLIENT" == native ]]; then
+  [[ -n "${MUMBLE_URI:-}" ]] || { echo >&2 "Native Mumble requires MUMBLE_URI."; exit 1; }
+  export BRIDGE_MUMBLE_AUTOSTART=false BRIDGE_MUMBLE_NATIVE_AUTOSTART=true
+fi
 
 export BRIDGE_DESKTOP_AUTOSTART=true
 if [[ $(/usr/local/bin/bridge-browser-mode status) == headless ]]; then

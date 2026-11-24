@@ -10,7 +10,7 @@
 //   audio/pulse.js         PulseAudio helpers
 //   api/server.js          local HTTP API
 
-const { CALL_ANNOUNCEMENTS, VOICE_BACKEND } = require('./config');
+const { CALL_ANNOUNCEMENTS, COMBINED_VOICE, VOICE_BACKEND } = require('./config');
 const { createApiServer } = require('./api/server');
 const { startAudioRouter } = require('./audio/router');
 const { runMumbleCommandBot } = require('./mumble/command-listener');
@@ -57,6 +57,10 @@ async function main() {
     createApiServer(waClient);
     if (CALL_ANNOUNCEMENTS) startCallAnnouncements(waClient);
 
+    if (COMBINED_VOICE) {
+        await Promise.all([runTeamSpeakCommandListener(waClient), runMumbleCommandBot(waClient)]);
+        return;
+    }
     if (VOICE_BACKEND === 'mumble') {
         await runMumbleCommandBot(waClient);
         return;

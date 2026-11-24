@@ -2,18 +2,21 @@
 
 const { spawn } = require('child_process');
 const readline = require('readline');
+const { createAudioGraph } = require('./graph');
 const { runPactl } = require('./pulse');
-const { WHATSAPP_PULSE_SOURCE, WHATSAPP_PULSE_SOURCE_NUDGE } = require('../config');
+const { COMBINED_VOICE, WHATSAPP_PULSE_SOURCE, WHATSAPP_PULSE_SOURCE_NUDGE } = require('../config');
 const { sleep } = require('../util');
 
 // Reconcile after subscription events, rather than continuously moving streams
 // and toggling defaults. A full snapshot also repairs externally removed devices.
 function createAudioReconciler({
     pactl = runPactl,
+    combined = COMBINED_VOICE,
     pause = sleep,
     source = WHATSAPP_PULSE_SOURCE,
     nudgeSource = WHATSAPP_PULSE_SOURCE_NUDGE,
 } = {}) {
+    const graph = createAudioGraph(combined);
     const seenCaptures = new Set();
     const list = async (type) => JSON.parse(await pactl(['--format=json', 'list', type]));
 
@@ -21,27 +24,23 @@ function createAudioReconciler({
         let sinks = await list('sinks');
         let sources = await list('sources');
         let created = false;
-        for (const [name, description] of [
-            ['ts_out', 'TeamSpeak_to_WhatsApp'],
-            ['wa_out', 'WhatsApp_to_TeamSpeak'],
-        ]) {
-            if (sinks.some((sink) => sink.name === name)) continue;
-            await pactl(['load-module', 'module-null-sink', `sink_name=${name}`,
-                'rate=48000', 'channels=2', 'channel_map=front-left,front-right',
-                `sink_properties=device.description=${description}`]);
-            created = true;
+        for (const [devices, desired] of [[sinks, graph.sinks], [sources, graph.sources]]) {
+            for (const [name, args] of desired) {
+                if (devices.some((device) => device.name === name)) continue;
+                await pactl(['load-module', ...args]);
+                created = true;
+            }
         }
-        for (const [name, master, description] of [
-            ['ts_mic', 'ts_out.monitor', 'TeamSpeak_to_WhatsApp_Microphone'],
-            ['wa_mic', 'wa_out.monitor', 'WhatsApp_to_TeamSpeak_Microphone'],
-        ]) {
-            if (sources.some((device) => device.name === name)) continue;
-            await pactl(['load-module', 'module-remap-source', `source_name=${name}`,
-                `master=${master}`, 'rate=48000', 'channels=2',
-                'channel_map=front-left,front-right',
-                'master_channel_map=front-left,front-right',
-                `source_properties=device.description=${description}`]);
-            created = true;
+        if (combined) {
+            const loopbacks = (await list('modules')).filter((m) => m.name === 'module-loopback');
+            for (const args of graph.routes) {
+                const [, sourceArg, sinkArg] = args;
+                const exists = loopbacks.some((module) => {
+                    const parameters = module.argument.split(/\s+/);
+                    return parameters.includes(sourceArg) && parameters.includes(sinkArg);
+                });
+                if (!exists) await pactl(['load-module', ...args]);
+            }
         }
         if (created) {
             sinks = await list('sinks');
@@ -66,13 +65,12 @@ function createAudioReconciler({
         ]) {
             for (const stream of streams) {
                 const chromium = isChromium(stream);
-                const voice = ['mumble', 'bridge-mumble', 'ts3client_linux_amd64'].includes(
-                    stream.properties?.['application.process.binary'],
-                );
-                if (!chromium && !voice) continue;
-                const target = field === 'sink'
-                    ? (chromium ? 'wa_out' : 'ts_out')
-                    : (chromium ? source : 'wa_mic');
+                const binary = stream.properties?.['application.process.binary'];
+                const mumble = binary === 'mumble' || binary === 'bridge-mumble';
+                if (!chromium && !mumble && binary !== 'ts3client_linux_amd64') continue;
+                let target = field === 'sink' ? 'ts_out' : 'wa_mic';
+                if (chromium) target = field === 'sink' ? 'wa_out' : source;
+                if (combined && mumble) target = field === 'sink' ? 'mumble_out' : 'mumble_mic';
                 const device = devices.find((entry) => entry.name === target);
                 if (!device) throw new Error(`PulseAudio device ${target} is unavailable.`);
                 if (field === 'source' && chromium && !seenCaptures.has(stream.index)) {

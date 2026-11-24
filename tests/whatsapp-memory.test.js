@@ -2,6 +2,7 @@
 
 const assert = require('assert');
 const test = require('node:test');
+const { VOICE_BACKEND } = require('../bot/config');
 const state = require('../bot/state');
 const { refreshWhatsAppReady } = require('../bot/whatsapp/readiness');
 const {
@@ -33,13 +34,13 @@ test('concurrent readiness consumers share one browser request and retry failure
 });
 
 test('channel polls have a capacity and expire even with no further messages', async (t) => {
-    const previous = state.voiceChannels;
+    const previous = state.voiceChannels[VOICE_BACKEND];
     t.after(() => {
-        state.voiceChannels = previous;
+        state.voiceChannels[VOICE_BACKEND] = previous;
         state.channelPolls.clear();
         state.pendingChannelPolls = [];
     });
-    state.voiceChannels = { listSwitchableChannels: async () => [{ id: 2, name: 'Lobby' }] };
+    state.voiceChannels[VOICE_BACKEND] = { listSwitchableChannels: async () => [{ id: 2, name: 'Lobby' }] };
     let id = 0;
     const client = {
         sendMessage: async () => ({ id: { id: `p${++id}` }, unusedPayload: Buffer.alloc(1024) }),

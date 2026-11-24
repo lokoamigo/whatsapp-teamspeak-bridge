@@ -15,6 +15,7 @@ status:
 	$(COMPOSE) ps
 	$(COMPOSE) exec bridge sh -c '\
 	  case "$${BRIDGE_VOICE_BACKEND:-teamspeak}" in \
+	    teamspeak-mumble) set -- teamspeak clientquery-relay clientquery-watchdog mumble-native ;; \
 	    mumble) \
 	      if [ "$${BRIDGE_MUMBLE_CLIENT:-gui}" = native ]; then set -- mumble-native; else set -- mumble; fi ;; \
 	    *) set -- teamspeak clientquery-relay clientquery-watchdog ;; \

@@ -41,6 +41,7 @@ impl Config {
         if !(8000..=64000).contains(&bitrate) {
             bail!("MUMBLE_NATIVE_BITRATE must be between 8000 and 64000");
         }
+        let combined = env::var("BRIDGE_VOICE_BACKEND").as_deref() == Ok("teamspeak-mumble");
         Ok(Self {
             host: parsed.host,
             port: parsed.port,
@@ -55,8 +56,8 @@ impl Config {
                 .ok()
                 .filter(|s| !s.is_empty())
                 .map(PathBuf::from),
-            source: "wa_mic".into(),
-            sink: "ts_out".into(),
+            source: if combined { "mumble_mic" } else { "wa_mic" }.into(),
+            sink: if combined { "mumble_out" } else { "ts_out" }.into(),
             root,
             directory,
             gui,

@@ -27,6 +27,6 @@ for _ in $(seq 1 60); do
   sleep 0.5
 done
 docker run --rm --name "$name-client" --network "$name" --user bridge --entrypoint node \
-  -e MUMBLE_TEST_HOST="$name-server" -e MUMBLE_TEST_SUPERUSER_PASSWORD="$password" \
+  -e BRIDGE_TEST_THREE_WAY -e MUMBLE_TEST_HOST="$name-server" -e MUMBLE_TEST_SUPERUSER_PASSWORD="$password" \
   --mount "type=bind,source=$PWD,target=/work,readonly" \
   "$bridge_image" /work/tests/mumble-native/e2e.js

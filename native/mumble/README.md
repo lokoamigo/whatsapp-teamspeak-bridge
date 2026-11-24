@@ -10,7 +10,8 @@ existing commands over a mode-0600 Unix socket in a mode-0700 runtime directory.
 Only one command consumer can attach; independent status peers are bounded.
 Voice capture and playback use dedicated threads and explicit PulseAudio
 devices (`wa_mic` and `ts_out`), so default-device microphone nudges cannot
-change this client's routing.
+change this client's routing. The combined `teamspeak-mumble` backend selects
+the same helper and identity with dedicated devices `mumble_mic` and `mumble_out`.
 
 The protocol dependency is pinned to
 `Mumcord/mumble-client-protocol@3d883aa4d8d9a1b8910dc4fb6b8bdf8cff788503`.
@@ -31,6 +32,7 @@ docker create --name bridge-native-artifact bridge-mumble-native-build:local
 docker cp bridge-native-artifact:/build/target/release/bridge-mumble native/mumble/target/release/bridge-mumble
 docker rm bridge-native-artifact
 bash tests/mumble-native/run.sh
+BRIDGE_TEST_THREE_WAY=1 bash tests/mumble-native/run.sh
 ```
 
 The end-to-end runner creates an internal Docker network and disposable Mumble

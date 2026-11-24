@@ -29,10 +29,13 @@ function startCallAnnouncements(waClient, { intervalMs = CALL_ANNOUNCE_POLL_MS }
             const messages = update(await getLiveWhatsAppCallStatus(waClient));
             for (const message of messages) {
                 console.log(`Call announcement: ${message}`);
-                if (!state.voiceChannels) continue;
-                await state.voiceChannels.sendChannelMessage(message).catch((error) => {
-                    console.error(`Could not post call announcement: ${error.message}`);
-                });
+                await Promise.all(Object.entries(state.voiceChannels).map(async ([server, channels]) => {
+                    try {
+                        await channels.sendChannelMessage(message);
+                    } catch (error) {
+                        console.error(`Could not post call announcement to ${server}: ${error.message}`);
+                    }
+                }));
             }
         } catch (error) {
             logError(`Call announcement poll failed: ${error.message}`);
