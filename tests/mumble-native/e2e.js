@@ -204,7 +204,9 @@ async function main() {
     const health = execFileSync('/work/native/mumble/target/release/bridge-mumble', ['--status'], {
         env: { ...process.env, MUMBLE_NATIVE_SOCKET: bridge.socket }, encoding: 'utf8',
     });
-    assert.strictEqual(JSON.parse(health).connected, true);
+    const initialStatus = JSON.parse(health);
+    assert.strictEqual(initialStatus.connected, true);
+    assert.deepStrictEqual(await bridge.control.request('current_channel'), { id: channel, name: 'Bridge' });
     step('independent health probes work while Node owns command control');
 
     await pause(500);
@@ -266,6 +268,8 @@ async function main() {
         const peerSession = [...admin.users.values()].find((u) => u.name === 'PeerC').session;
         admin.moveUserToChannel(peerSession, other);
         await until('operator moved accounts', () => user().channelId === other && admin.self.channelId === other);
+        await until('status follows the bridge into the new room', async () =>
+            (await bridge.control.request('current_channel')).name === 'Other');
         await until('audio arrives in destination', () => power(recordC.pcm(), 600) > 300);
         await bridge.control.sendChannelMessage('announcement after move');
         await until('destination receives announcement', () => admin.replies.includes('announcement after move'));
