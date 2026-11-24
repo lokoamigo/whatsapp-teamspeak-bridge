@@ -58,7 +58,9 @@ cargo build --release --locked --manifest-path native/mumble/Cargo.toml
 ## Bounds and recovery
 
 - 20-ms, 48-kHz mono frames; 120-ms initial receive jitter buffer so delayed
-  speech is played instead of concealed and then discarded.
+  speech has time to arrive. Late multi-frame packets can still contribute
+  their unplayed audio, and the mixer keeps buffered speech across packet gaps.
+  PulseAudio paces playback with an 80-ms target buffer and a 60-ms prebuffer.
 - Capture transmits only above roughly -50 dBFS RMS, with 20 ms of lead-in
   and a 300-ms release. Silence sends a Mumble transmission terminator and
   stops Opus encoding; `transmitting` in status reports current sound activity.

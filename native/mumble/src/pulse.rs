@@ -61,8 +61,11 @@ impl Stream {
         let bytes = (FRAME * 2) as u32;
         let attr = BufferAttr {
             maxlength: bytes * 8,
-            tlength: bytes * 2,
-            prebuf: 0,
+            // Let PulseAudio pace the playback worker through blocking
+            // writes. Queue four frames and prebuffer three to absorb
+            // scheduler pauses without inserting silence between frames.
+            tlength: bytes * 4,
+            prebuf: bytes * 3,
             minreq: bytes,
             fragsize: bytes,
         };

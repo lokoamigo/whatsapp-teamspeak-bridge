@@ -61,14 +61,14 @@ impl Encoder {
         Ok(encoder)
     }
 
-    pub fn encode(&mut self, pcm: &[i16; FRAME]) -> Result<Vec<u8>> {
+    pub fn encode<const N: usize>(&mut self, pcm: &[i16; N]) -> Result<Vec<u8>> {
         let mut packet = vec![0; 512];
         // SAFETY: both slices cover the lengths supplied to libopus.
         let size = unsafe {
             opus_encode(
                 self.0.as_ptr(),
                 pcm.as_ptr(),
-                FRAME as i32,
+                N as i32,
                 packet.as_mut_ptr(),
                 packet.len() as i32,
             )
@@ -151,7 +151,7 @@ mod tests {
     use super::*;
     #[test]
     fn opus_roundtrip_and_loss_concealment() {
-        let pcm = std::array::from_fn(|i| ((i as f32 * 0.0576).sin() * 8000.) as i16);
+        let pcm: [i16; FRAME] = std::array::from_fn(|i| ((i as f32 * 0.0576).sin() * 8000.) as i16);
         let packet = Encoder::new(32000).unwrap().encode(&pcm).unwrap();
         assert_eq!(Decoder::samples(&packet).unwrap(), FRAME);
         let mut decoder = Decoder::new().unwrap();
