@@ -216,7 +216,7 @@ class ClientQuery {
         return channels.filter((channel) => channel.id !== currentChannelId);
     }
 
-    async moveSelfToChannel(channel) {
+    async moveSelfToChannel(channel, { allowReconnect = true } = {}) {
         const channelId = typeof channel === 'object' ? channel.id : channel;
         const channelName = typeof channel === 'object' ? channel.name : '';
         const ownInfo = await this.getOwnClientInfo();
@@ -231,7 +231,7 @@ class ClientQuery {
         const movedChannelId = movedInfo.cid || movedInfo.client_channel_id || null;
         if (movedChannelId === channelId) return;
 
-        if (!channelName) {
+        if (!channelName || !allowReconnect) {
             throw new Error(
                 `TeamSpeak still reports current channel ${movedChannelId || 'unknown'} after moving to ${channelId}.`,
             );

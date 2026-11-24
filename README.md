@@ -83,6 +83,11 @@ auf. Beide Server unterstützen die bestehenden `!wa`-Befehle. Antworten gehen
 privat an den Absender auf demselben Server. Gewöhnliche Chatnachrichten bleiben
 im jeweiligen Dienst.
 
+Wer in `BRIDGE_COMMANDER_UIDS` eingetragen ist, kann im kombinierten Modus
+den jeweiligen Bridge-Nutzer mit `!wa switch mumble "Besprechung 1"` oder
+`!wa switch teamspeak Support` gezielt verschieben. Die Server-Berechtigungen
+des Bridge-Nutzers gelten weiterhin.
+
 ### Mumble statt TeamSpeak
 
 Für Mumble in `.env` setzen:
