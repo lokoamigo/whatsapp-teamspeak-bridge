@@ -101,9 +101,9 @@ async function audioFixture(name, uri, handler) {
     });
     return fixture;
 }
-function record(fixture) {
+function record(fixture, device = 'ts_mic') {
     const samples = [];
-    const child = launch('pacat', ['--record', '--raw', '--rate=48000', '--channels=1', '--format=s16le', '--device=ts_mic'], fixture.env, ['ignore', 'pipe', 'pipe']);
+    const child = launch('pacat', ['--record', '--raw', '--rate=48000', '--channels=1', '--format=s16le', `--device=${device}`], fixture.env, ['ignore', 'pipe', 'pipe']);
     let bytes = 0;
     child.stdout.on('data', (data) => {
         samples.push(data); bytes += data.length;
@@ -119,9 +119,9 @@ function tone(fixture, frequency, seconds = 3) {
     child.stdin.end(pcm);
     return child;
 }
-function power(pcm, frequency) {
-    const samples = Math.min(Math.floor(pcm.length / 2), 48000);
-    if (samples < 4800) return 0;
+function power(pcm, frequency, window = 48000) {
+    const samples = Math.min(Math.floor(pcm.length / 2), window);
+    if (samples < Math.min(window, 4800)) return 0;
     const start = pcm.length - samples * 2;
     let real = 0; let imaginary = 0;
     for (let i = 0; i < samples; i++) {
@@ -236,6 +236,26 @@ async function main() {
     step('bidirectional PCM survives Opus/server transport; overlapping speakers mix without a loop');
 
     if (bridge.env.BRIDGE_VOICE_BACKEND === 'teamspeak-mumble') {
+        const teamSpeak = record(bridge, 'wa_mic');
+        const continuous = tone(peerB, 600, 6);
+        try {
+            await until('continuous Mumble audio in both downstream microphones', () =>
+                [recordA, teamSpeak].every((capture) => {
+                    const pcm = capture.pcm();
+                    const window = 960 * 2;
+                    const windows = 50;
+                    if (pcm.length < window * windows) return false;
+                    return Array.from({ length: windows }, (_, i) => {
+                        const end = pcm.length - i * window;
+                        return power(pcm.subarray(end - window, end), 600, 960);
+                    }).every((level) => level > 200);
+                }));
+        } finally {
+            await stop(continuous);
+            await stop(teamSpeak.child);
+        }
+        step('Mumble playback is continuous in both TeamSpeak and WhatsApp microphone mixes');
+
         // The operator moves the bridge while audio is live. Peer B stays
         // behind and peer C follows the operator into the destination room.
         const ongoing = tone(bridge, 600, 12);

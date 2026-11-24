@@ -17,7 +17,8 @@ const MAX_PACKETS: usize = 24;
 // The fixed 40 ms lead previously concealed ordinary delayed speech packets,
 // then discarded them when they arrived. Buffer six 20 ms frames before play.
 const JITTER_DELAY: Duration = Duration::from_millis(120);
-const TICK: Duration = Duration::from_millis(20);
+const SEQUENCE_SAMPLES: usize = RATE / 100;
+const MAX_CONCEALMENTS: u8 = 3;
 const VOICE_RMS: u64 = 100; // Approximately -50 dBFS; ignore quiet digital noise.
 const VOICE_RELEASE_FRAMES: u8 = 15; // 300 ms keeps gaps between words open.
 
@@ -78,7 +79,14 @@ impl VoiceGate {
 struct Packet {
     data: Bytes,
     last: bool,
+    samples: usize,
 }
+impl Packet {
+    fn end(&self, seq: u64) -> u64 {
+        seq.saturating_add((self.samples / SEQUENCE_SAMPLES) as u64)
+    }
+}
+
 struct Speaker {
     decoder: Decoder,
     packets: BTreeMap<u64, Packet>,
@@ -107,13 +115,19 @@ impl Speaker {
     }
 
     fn push(&mut self, seq: u64, packet: Packet, now: Instant) {
-        self.heard = now;
+        // Reject packets already fully played, but retain the tail of a
+        // longer packet that arrives after concealment has started.
+        if seq < self.next && (packet.samples == 0 || packet.end(seq) <= self.next) && self.playing
+        {
+            return;
+        }
+        if self.packets.len() >= MAX_PACKETS {
+            return;
+        }
         if !self.playing {
             self.next = self.next.min(seq);
         }
-        if seq < self.next || self.packets.len() >= MAX_PACKETS {
-            return;
-        }
+        self.heard = now;
         self.packets.entry(seq).or_insert(packet);
     }
 
@@ -123,41 +137,48 @@ impl Speaker {
         }
         self.playing = true;
         while self.pcm.len() < FRAME && !self.ended {
-            if let Some(packet) = self.packets.remove(&self.next) {
+            // A packet can overlap the playout cursor after a short loss.
+            // Decode it whole and enqueue only the audio not yet played.
+            self.packets
+                .retain(|&seq, packet| seq >= self.next || packet.end(seq) > self.next);
+            if let Some((&seq, _)) = self.packets.first_key_value()
+                && seq <= self.next
+            {
+                let packet = self.packets.pop_first().expect("packet present").1;
                 self.missing = 0;
-                if packet.data.is_empty() {
+                if packet.samples == 0 {
                     self.ended = true;
                     break;
                 }
-                let Ok(samples) = Decoder::samples(&packet.data) else {
-                    self.next = self.next.saturating_add(2);
-                    continue;
-                };
-                self.next = self.next.saturating_add((samples / (RATE / 100)) as u64);
-                if let Ok(decoded) = self.decoder.decode(Some(&packet.data), samples) {
-                    self.pcm.extend(decoded);
+                let already_played = ((self.next - seq) as usize) * SEQUENCE_SAMPLES;
+                self.next = packet.end(seq);
+                if let Ok(decoded) = self.decoder.decode(Some(&packet.data), packet.samples) {
+                    self.pcm.extend(decoded.into_iter().skip(already_played));
                 }
                 self.ended = packet.last;
             } else {
-                if self.missing >= 3 {
-                    self.ended = true;
+                if self.missing >= MAX_CONCEALMENTS {
+                    // Rebuffer from packets that are already queued. A lost
+                    // packet must never discard the rest of the talk burst.
+                    if let Some((&seq, _)) = self.packets.first_key_value() {
+                        self.next = seq;
+                        self.ready = now + JITTER_DELAY;
+                        self.playing = false;
+                        self.missing = 0;
+                    } else {
+                        self.ended = true;
+                    }
                     break;
                 }
-                self.packets.retain(|seq, _| *seq >= self.next);
-                // A 10 ms packet may follow a missing 10 ms packet: never
-                // conceal past the sequence number of a packet already queued.
-                let samples = self
+                let units = self
                     .packets
                     .first_key_value()
-                    .map(|(&seq, _)| ((seq - self.next) as usize * (RATE / 100)).min(FRAME))
-                    .unwrap_or(FRAME);
-                if samples == 0 {
-                    break;
-                }
+                    .map_or(2, |(&seq, _)| (seq - self.next).min(2));
+                let samples = units as usize * SEQUENCE_SAMPLES;
                 if let Ok(concealed) = self.decoder.decode(None, samples) {
                     self.pcm.extend(concealed);
                 }
-                self.next = self.next.saturating_add((samples / (RATE / 100)) as u64);
+                self.next = self.next.saturating_add(units);
                 self.missing += 1;
             }
         }
@@ -180,12 +201,16 @@ impl Mixer {
         self.speakers.clear();
     }
     pub fn push(&mut self, packet: VoicePacket, now: Instant) {
-        if packet.payload.len() > 8192 || (packet.payload.is_empty() && !packet.is_last) {
-            return;
-        }
+        let samples = if packet.payload.is_empty() && packet.is_last {
+            0
+        } else {
+            match Decoder::samples(&packet.payload) {
+                Ok(samples) if samples % SEQUENCE_SAMPLES == 0 => samples,
+                _ => return,
+            }
+        };
         let replace = self.speakers.get(&packet.session).is_some_and(|speaker| {
             (speaker.ended && speaker.pcm.is_empty())
-                || packet.seq > speaker.next.saturating_add(20)
                 || now.duration_since(speaker.heard) > Duration::from_secs(1)
         });
         if replace {
@@ -206,6 +231,7 @@ impl Mixer {
                 Packet {
                     data: packet.payload,
                     last: packet.is_last,
+                    samples,
                 },
                 now,
             );
@@ -384,7 +410,6 @@ impl Audio {
             };
             let mut stream = None;
             let mut mixer = Mixer::new();
-            let mut next = Instant::now();
             let mut last_error = None;
             let mut generation = state.generation.load(Ordering::Relaxed);
             while !state.stopped.load(Ordering::Relaxed) {
@@ -407,11 +432,6 @@ impl Audio {
                 if generation != current {
                     mixer.clear();
                     generation = current;
-                }
-                // Never replay a backlog after a stalled sound server.
-                if now.saturating_duration_since(next) > Duration::from_millis(100) {
-                    mixer.clear();
-                    next = now;
                 }
                 for _ in 0..64 {
                     let Ok((packet_generation, packet)) = in_rx.try_recv() else {
@@ -441,8 +461,6 @@ impl Audio {
                     continue;
                 }
                 state.played.fetch_add(1, Ordering::Relaxed);
-                next += TICK;
-                std::thread::sleep(next.saturating_duration_since(Instant::now()));
             }
         });
         Self {
@@ -554,7 +572,8 @@ mod tests {
     #[test]
     fn reorder_deduplicate_mix_and_expire() {
         let mut encoder = Encoder::new(32000).unwrap();
-        let tone = std::array::from_fn(|i| ((i as f32 * 0.0576).sin() * 4000.) as i16);
+        let tone: [i16; FRAME] =
+            std::array::from_fn(|i| ((i as f32 * 0.0576).sin() * 4000.) as i16);
         let first = Bytes::from(encoder.encode(&tone).unwrap());
         let second = Bytes::from(encoder.encode(&tone).unwrap());
         let now = Instant::now();
@@ -588,7 +607,8 @@ mod tests {
     #[test]
     fn delayed_second_packet_is_played_without_concealment() {
         let mut encoder = Encoder::new(32000).unwrap();
-        let tone = std::array::from_fn(|i| ((i as f32 * 0.0576).sin() * 4000.) as i16);
+        let tone: [i16; FRAME] =
+            std::array::from_fn(|i| ((i as f32 * 0.0576).sin() * 4000.) as i16);
         let first = Bytes::from(encoder.encode(&tone).unwrap());
         let second = Bytes::from(encoder.encode(&tone).unwrap());
         let now = Instant::now();
@@ -616,11 +636,57 @@ mod tests {
         );
         assert!(
             mixer
-                .render(now + JITTER_DELAY + TICK)
+                .render(now + JITTER_DELAY + Duration::from_millis(20))
                 .iter()
                 .any(|s| s.abs() > 100)
         );
     }
+    #[test]
+    fn late_long_packet_still_plays_its_unconcealed_samples() {
+        let mut encoder = Encoder::new(32000).unwrap();
+        let samples: [i16; FRAME * 3] =
+            std::array::from_fn(|i| ((i as f32 * 0.0576).sin() * 6000.) as i16);
+        let first = Bytes::from(encoder.encode(&samples).unwrap());
+        let second = Bytes::from(encoder.encode(&samples).unwrap());
+        let now = Instant::now();
+        let mut mixer = Mixer::new();
+        mixer.push(packet(1, 0, first, false), now);
+        let start = now + JITTER_DELAY;
+        let tick = Duration::from_millis(20);
+        for frame in 0..4 {
+            mixer.render(start + tick * frame);
+        }
+        assert_eq!(mixer.speakers[&1].next, 8, "20 ms concealed");
+        // A 60 ms desktop packet still has 40 ms left to play.
+        mixer.push(packet(1, 6, second, true), start + tick * 4);
+        let output = mixer.render(start + tick * 4);
+        assert!(output.iter().any(|s| s.abs() > 1000));
+        assert_eq!(mixer.speakers[&1].next, 12);
+        assert_eq!(mixer.speakers[&1].pcm.len(), FRAME);
+        assert!(mixer.speakers[&1].ended);
+    }
+
+    #[test]
+    fn packet_gap_does_not_discard_audio_already_buffered() {
+        let data = Bytes::from(Encoder::new(32000).unwrap().encode(&[1000; FRAME]).unwrap());
+        let now = Instant::now();
+        let mut mixer = Mixer::new();
+        mixer.push(packet(1, 0, data.clone(), false), now);
+        let start = now + JITTER_DELAY;
+        let tick = Duration::from_millis(20);
+        mixer.render(start);
+        mixer.push(packet(1, 10, data.clone(), false), start + tick);
+        for frame in 1..=4 {
+            mixer.render(start + tick * frame);
+        }
+        // Sequence 10 was queued before the loss limit was reached.
+        // It must play before the next arriving packet.
+        mixer.push(packet(1, 12, data, true), start + tick * 5);
+        mixer.render(start + tick * 4 + JITTER_DELAY);
+        assert_eq!(mixer.speakers[&1].next, 12);
+        assert!(mixer.speakers[&1].packets.contains_key(&12));
+    }
+
     #[test]
     fn speaker_and_jitter_memory_are_bounded() {
         let data = Bytes::from(Encoder::new(32000).unwrap().encode(&[0; FRAME]).unwrap());
