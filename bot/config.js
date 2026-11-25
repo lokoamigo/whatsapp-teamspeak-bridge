@@ -105,6 +105,9 @@ const AUTO_ACCEPT_POLL_MS = intFromEnv('BRIDGE_AUTO_ACCEPT_POLL_MS', 5000, {
 });
 
 // Generic join/leave messages for the WhatsApp call in the voice channel chat.
+// Combined mode only: copy channel chat between the TeamSpeak and Mumble rooms.
+const CHAT_RELAY =
+    COMBINED_VOICE && (process.env.BRIDGE_CHAT_RELAY || 'true').trim().toLowerCase() !== 'false';
 const CALL_ANNOUNCEMENTS =
     (process.env.BRIDGE_CALL_ANNOUNCEMENTS || 'true').trim().toLowerCase() === 'true';
 const CALL_ANNOUNCE_POLL_MS = intFromEnv('BRIDGE_CALL_ANNOUNCE_POLL_MS', 3000, {
@@ -156,6 +159,7 @@ module.exports = {
     SHOW_MORE_CHANNELS_OPTION,
     AUTO_ACCEPT_POLL_MS,
     CALL_ANNOUNCEMENTS,
+    CHAT_RELAY,
     CALL_ANNOUNCE_POLL_MS,
     COMMANDER_UIDS,
     CONTACT_GROUPS_JSON,

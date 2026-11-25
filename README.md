@@ -80,8 +80,15 @@ verschieben. Audio und aktivierte Anruf-Hinweise folgen dem jeweiligen Nutzer.
 und -Hinweise den ClientQuery-API-Key einrichten. `BRIDGE_COMMANDER_UIDS` nimmt
 TeamSpeak-UIDs und Mumble-Zertifikathashes gemeinsam als kommagetrennte Liste
 auf. Beide Server unterstützen die bestehenden `!wa`-Befehle. Antworten gehen
-privat an den Absender auf demselben Server. Gewöhnliche Chatnachrichten bleiben
-im jeweiligen Dienst.
+privat an den Absender auf demselben Server.
+
+Kanal-Chat wird zwischen beiden Räumen gespiegelt: Eine Nachricht im
+TeamSpeak-Kanal der Bridge erscheint im Mumble-Kanal als `[TS] Name: Text` und
+umgekehrt als `[Mumble] Name: Text`. Private Nachrichten, Server-Chat, `!wa`-Befehle
+und die eigenen Hinweise der Bridge werden nicht weitergegeben. Nachrichten werden
+auf 900 Byte gekürzt; bei einem Ansturm verwirft die Bridge überzählige Nachrichten
+(höchstens 8 wartende je Richtung), damit TeamSpeaks Flood-Schutz den Bridge-Client
+nicht trennt. Mit `BRIDGE_CHAT_RELAY=false` ist das Spiegeln abgeschaltet.
 
 Bei verzerrtem Mumble-Ton zeigt `docker compose exec bridge bridge-mumble --status`
 Empfangszähler je Mumble-Sitzung und Übersteuerungen in der Mumble-Mischung.

@@ -10,7 +10,7 @@ const { assertCommander, extractCommand, handleCommand } = require('../commands'
 const { teamSpeakChannels } = require('./channels');
 const { ClientQuery } = require('./client-query');
 
-async function runTeamSpeakCommandListener(waClient) {
+async function runTeamSpeakCommandListener(waClient, { chatRelay } = {}) {
     state.voiceChannels.teamspeak = teamSpeakChannels;
 
     if (!TS_API_KEY) {
@@ -31,6 +31,8 @@ async function runTeamSpeakCommandListener(waClient) {
                 console.log(
                     `TeamSpeak message from ${event.invokername || event.invokeruid || event.invokerid}: ${event.msg || ''}`,
                 );
+
+                if (chatRelay) chatRelay.fromTeamSpeak(event, { ownClientId: query.ownClientId });
 
                 const commandText = extractCommand(event.msg || '');
                 if (!commandText) return;

@@ -8,6 +8,11 @@ backward compatibility guarantees.
 
 ## [Unreleased]
 
+### Added
+
+- Combined mode relays channel chat between the TeamSpeak and Mumble rooms as
+  `[TS] Name: text` / `[Mumble] Name: text`. Disable with `BRIDGE_CHAT_RELAY=false`.
+
 ### Fixed
 
 - Outgoing calls now use the fork's current-call tracking and reject declined
