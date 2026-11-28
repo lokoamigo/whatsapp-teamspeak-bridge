@@ -146,6 +146,11 @@ class NativeMumbleClient extends EventEmitter {
 
     listSwitchableChannels() { return this.request('channels'); }
     moveToChannel(channel) { return this.request('move', { channel: Number(channel.id) }); }
+    async roster() {
+        const { channel, users } = await this.request('roster');
+        return { channel, users: users.map((user) => ({ ...user, key: user.session })) };
+    }
+    sendPrivateMessage(session, text) { return this.request('send_text', { session, text: textToMumbleHtml(text) }); }
     sendChannelMessage(text) { return this.request('send_channel', { text: textToMumbleHtml(text) }); }
 }
 

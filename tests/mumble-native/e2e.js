@@ -209,6 +209,12 @@ async function main() {
     assert.deepStrictEqual(await bridge.control.request('current_channel'), { id: channel, name: 'Bridge' });
     step('independent health probes work while Node owns command control');
 
+    const roster = await bridge.control.roster();
+    assert.strictEqual(roster.channel, channel);
+    assert.deepStrictEqual(roster.users.map((u) => u.name).sort(), ['Commander', 'PeerB', 'PeerC', 'SuperUser']);
+    assert.ok(roster.users.every((u) => u.key === u.session));
+    step('roster lists the other users in the bridge channel');
+
     await pause(500);
     const idle = await bridge.control.request('status');
     assert.strictEqual(idle.transmitting, false);

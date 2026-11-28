@@ -90,6 +90,13 @@ auf 900 Byte gekürzt; bei einem Ansturm verwirft die Bridge überzählige Nachr
 (höchstens 8 wartende je Richtung), damit TeamSpeaks Flood-Schutz den Bridge-Client
 nicht trennt. Mit `BRIDGE_CHAT_RELAY=false` ist das Spiegeln abgeschaltet.
 
+Beide Räume erfahren voneinander: Betritt oder verlässt jemand den Bridge-Kanal
+auf einer Seite, meldet die Bridge das im Chat der anderen Seite
+(`[TS] joined: Alice` / `[Mumble] left: Bob`). Wer neu hinzukommt, erhält
+zusätzlich privat die Liste der Personen im anderen Raum. Die Bridge prüft alle
+3 Sekunden; nach Verbindungsabbrüchen oder einem Kanalwechsel der Bridge wird
+still neu abgeglichen. Mit `BRIDGE_PRESENCE_NOTICES=false` abschaltbar.
+
 Bei verzerrtem Mumble-Ton zeigt `docker compose exec bridge bridge-mumble --status`
 Empfangszähler je Mumble-Sitzung und Übersteuerungen in der Mumble-Mischung.
 Für einen Vergleich denselben Satz über Desktop und Telefon sprechen und

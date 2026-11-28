@@ -58,6 +58,20 @@ fn current_channel(handle: &Handle) -> Result<Value> {
     })
 }
 
+// Other users in the bridge's own channel, for the bridge's presence notices.
+fn roster(handle: &Handle) -> Result<Value> {
+    handle.with_state(|state| {
+        let own = state.own_user().context("Own channel is unavailable")?;
+        let users: Vec<Value> = state
+            .users
+            .values()
+            .filter(|user| user.session != own.session && user.channel_id == own.channel_id)
+            .map(|user| json!({"session": user.session, "name": user.name}))
+            .collect();
+        Ok(json!({"channel": own.channel_id, "users": users}))
+    })
+}
+
 fn resolve_channel(handle: &Handle, path: &[String]) -> Result<Option<u32>> {
     if path.is_empty() {
         return Ok(None);
@@ -145,6 +159,7 @@ fn rpc(rpc: ipc::Rpc, handle: &Handle, pending: &mut Option<PendingMove>) {
         match request.op.as_str() {
             "channels" => Ok(channels(handle)),
             "current_channel" => current_channel(handle),
+            "roster" => roster(handle),
             "send_text" | "send_channel" => {
                 let text = request.text.context("Missing message")?;
                 if text.len() > 16000 {
