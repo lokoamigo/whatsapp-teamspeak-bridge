@@ -22,6 +22,16 @@ launcher_padding = 4 2 4
 launcher_icon_size = 24
 launcher_item_app = /usr/share/applications/bridge-tile.desktop
 
+button = new
+button_text = Exit maintenance
+button_tooltip = Return the bridge to headless mode
+button_font = Sans 10
+button_font_color = #ffffff 100
+button_background_id = 2
+button_centered = 1
+button_padding = 10 2 0
+button_lclick_command = /usr/local/bin/exit-bridge-maintenance
+
 systray_padding = 6 2 4
 systray_icon_size = 24
 

@@ -34,6 +34,10 @@ if [[ "$BRIDGE_VOICE_BACKEND" != teamspeak && "$BRIDGE_MUMBLE_CLIENT" == native 
 fi
 
 export BRIDGE_DESKTOP_AUTOSTART=true
+rm -f /run/bridge-native-mumble
+if [[ $BRIDGE_MUMBLE_NATIVE_AUTOSTART == true ]]; then
+  touch /run/bridge-native-mumble
+fi
 if [[ $(/usr/local/bin/bridge-browser-mode status) == headless ]]; then
   export BRIDGE_DESKTOP_AUTOSTART=false
 fi

@@ -2,14 +2,11 @@
 set -euo pipefail
 
 mode_file=/data/browser-mode
-native_mumble=false
-if [[ ${BRIDGE_VOICE_BACKEND:-teamspeak} == mumble && ${BRIDGE_MUMBLE_CLIENT:-gui} == native ]]; then
-  native_mumble=true
-fi
+native_marker=/run/bridge-native-mumble
 
 case "${1:-status}" in
   status)
-    if $native_mumble && [[ -f "$mode_file" && $(<"$mode_file") == headless ]]; then
+    if [[ -f "$native_marker" && -f "$mode_file" && $(<"$mode_file") == headless ]]; then
       echo headless
     else
       echo maintenance
@@ -20,7 +17,7 @@ case "${1:-status}" in
   *) echo >&2 'Usage: bridge-browser-mode [status|headless|maintenance]'; exit 2 ;;
 esac
 
-if ! $native_mumble; then
+if [[ ! -f "$native_marker" ]]; then
   echo >&2 'Browser mode switching requires native Mumble.'
   exit 1
 fi
@@ -32,10 +29,14 @@ fi
 exec 9>/run/bridge-browser-mode.lock
 flock -x 9
 
+control() {
+  /usr/bin/supervisorctl -c /etc/supervisor/supervisord.conf "$@"
+}
+
 set_service() {
   local action=$1 service=$2 status name state
   # Supervisor returns a nonzero status code for stopped processes.
-  status=$(supervisorctl status "$service") || true
+  status=$(control status "$service") || true
   read -r name state _ <<< "$status"
   if [[ $name != "$service" ]]; then
     echo >&2 "Cannot determine Supervisor state for $service."
@@ -43,12 +44,12 @@ set_service() {
   fi
   case "$state" in
     RUNNING|STARTING)
-      if [[ $action == stop ]]; then supervisorctl stop "$service"; fi ;;
+      if [[ $action == stop ]]; then control stop "$service"; fi ;;
     STOPPED|FATAL|EXITED)
-      if [[ $action == start ]]; then supervisorctl start "$service"; fi ;;
+      if [[ $action == start ]]; then control start "$service"; fi ;;
     BACKOFF)
-      supervisorctl stop "$service"
-      if [[ $action == start ]]; then supervisorctl start "$service"; fi ;;
+      control stop "$service"
+      if [[ $action == start ]]; then control start "$service"; fi ;;
     *) echo >&2 "Cannot determine Supervisor state for $service."; return 1 ;;
   esac
 }
@@ -60,11 +61,14 @@ else
   for service in xvfb openbox desktop-panel x11vnc; do set_service start "$service"; done
 fi
 
-# Publish the mode atomically so bot and container restarts see one value.
-temporary=$(mktemp /data/.browser-mode.XXXXXX)
-trap 'rm -f -- "$temporary"' EXIT
-printf '%s\n' "$mode" > "$temporary"
-chmod 0644 "$temporary"
-mv -fT "$temporary" "$mode_file"
+# /data belongs to bridge. Write there with that user's permissions, even
+# when the switch was initiated by the desktop through sudo.
+runuser -u bridge -- /bin/bash -c '
+  set -euo pipefail
+  temporary=$(mktemp /data/.browser-mode.XXXXXX)
+  trap '\''rm -f -- "$temporary"'\'' EXIT
+  printf "%s\n" "$1" > "$temporary"
+  mv -fT "$temporary" "$2"
+' bash "$mode" "$mode_file"
 set_service start bridge-bot
 printf 'Browser mode: %s\n' "$mode"

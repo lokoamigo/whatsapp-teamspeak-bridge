@@ -242,6 +242,9 @@ Chromium-Profil und dieselbe WhatsApp-Anmeldung. Die Auswahl bleibt in
 `/data/browser-mode` beim Neustart und Ersetzen des Containers erhalten.
 Im Headless-Modus läuft die noVNC-Webseite für den Healthcheck weiter.
 Für eine Desktop-Verbindung und QR-Anmeldung zuerst `maintenance` wählen.
+Über **Exit maintenance** in der noVNC-Desktop-Leiste und eine Bestätigung
+wechselt der Container zurück in den Headless-Modus. Die Verbindung zum
+Desktop endet beim Wechsel.
 TeamSpeak und Mumble mit GUI benötigen weiterhin den Desktop.
 
 ## 2. Bauen und starten

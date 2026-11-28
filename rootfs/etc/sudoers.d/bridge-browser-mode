@@ -1,0 +1,1 @@
+bridge ALL=(root) NOPASSWD: NOSETENV: /usr/local/bin/bridge-browser-mode headless

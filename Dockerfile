@@ -58,7 +58,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       novnc websockify \
       pulseaudio pulseaudio-utils pavucontrol alsa-utils \
       dbus-x11 supervisor socat netcat-openbsd xdotool \
-      python3 \
+      python3 sudo \
       fonts-liberation fonts-noto-color-emoji \
       libasound2 libdbus-1-3 libevent-2.1-7 libglib2.0-0 libnss3 libxss1 \
       libx11-6 libx11-xcb1 libxcb1 libxcomposite1 libxcursor1 libxdamage1 \
@@ -118,7 +118,9 @@ COPY --from=mumble-native-build /build/target/release/bridge-mumble /usr/local/b
 COPY --from=mumble-native-build /build/licenses /usr/share/doc/bridge-mumble
 COPY bot/ ./bot/
 COPY rootfs/ /
-RUN chmod +x /usr/local/bin/*
+RUN chmod +x /usr/local/bin/* \
+    && chmod 0440 /etc/sudoers.d/bridge-browser-mode \
+    && visudo -cf /etc/sudoers.d/bridge-browser-mode
 
 ENV BRIDGE_VOICE_BACKEND=${BRIDGE_VOICE_BACKEND}
 
