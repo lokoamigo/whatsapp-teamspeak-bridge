@@ -106,6 +106,11 @@ erläutert die Felder.
 `!wa status` zeigt im kombinierten Modus die beiden Voice-Kanäle, den
 Verbindungs- und Audiostatus sowie den WhatsApp-Anrufstatus.
 
+Wer in `BRIDGE_COMMANDER_UIDS` eingetragen ist, kann im kombinierten Modus
+den jeweiligen Bridge-Nutzer mit `!wa switch mumble "Besprechung 1"` oder
+`!wa switch teamspeak Support` gezielt verschieben. Die Server-Berechtigungen
+des Bridge-Nutzers gelten weiterhin.
+
 ### Mumble statt TeamSpeak
 
 Für Mumble in `.env` setzen:

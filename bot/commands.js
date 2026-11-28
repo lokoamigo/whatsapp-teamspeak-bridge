@@ -6,6 +6,7 @@ const { COMMAND_PREFIX, COMMANDER_UIDS, COMBINED_VOICE } = require('./config');
 const state = require('./state');
 const { bridgeStatusText } = require('./voice-status');
 const { parseArgs } = require('./util');
+const { VOICE_CHANNEL_LABELS, switchCombinedVoiceChannel } = require('./voice-channels');
 const {
     contactGroupsText,
     normalizeContactId,
@@ -30,6 +31,7 @@ const {
 
 const CALL_COMMANDS = new Set(['add', 'accept', 'answer', 'call', 'callgroup', 'groupcall', 'hangup', 'end']);
 const BARE_COMMANDS = new Set(['help', 'status', ...CALL_COMMANDS]);
+const SWITCH_USAGE = `${COMMAND_PREFIX} switch <teamspeak|mumble> <channel name>`;
 
 function extractCommand(message) {
     const trimmed = String(message || '').trim();
@@ -84,6 +86,7 @@ async function executeCommand(waClient, args) {
             `${COMMAND_PREFIX} callgroup <contact-group-name>`,
             `${COMMAND_PREFIX} hangup`,
             `${COMMAND_PREFIX} status`,
+            ...(COMBINED_VOICE && COMMANDER_UIDS.size ? [SWITCH_USAGE] : []),
             `contactGroups=${contactGroupsText()}`,
         ].join('\n');
     }
@@ -94,6 +97,19 @@ async function executeCommand(waClient, args) {
             state.whatsapp = { ready: false, reason: error.message };
         });
         return `WhatsApp ${whatsappStatusText()} activeCall=${state.activeCallId || 'unknown'}`;
+    }
+
+    if (COMBINED_VOICE && command === 'switch') {
+        // Both chat listeners have already checked the sender's server identity.
+        if (COMMANDER_UIDS.size === 0) {
+            throw new Error('Channel switching requires a configured BRIDGE_COMMANDER_UIDS allowlist.');
+        }
+        const backend = args.shift()?.toLowerCase();
+        const channelName = args.join(' ').trim();
+        const label = VOICE_CHANNEL_LABELS.get(backend);
+        if (!label || !channelName) throw new Error(`Usage: ${SWITCH_USAGE}`);
+        const channel = await switchCombinedVoiceChannel(backend, channelName);
+        return `Switched ${label} channel to: ${channel.name}`;
     }
 
     if (command === 'add') {
