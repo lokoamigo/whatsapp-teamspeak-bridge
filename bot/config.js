@@ -108,6 +108,9 @@ const AUTO_ACCEPT_POLL_MS = intFromEnv('BRIDGE_AUTO_ACCEPT_POLL_MS', 5000, {
 // Combined mode only: copy channel chat between the TeamSpeak and Mumble rooms.
 const CHAT_RELAY =
     COMBINED_VOICE && (process.env.BRIDGE_CHAT_RELAY || 'true').trim().toLowerCase() !== 'false';
+// Combined mode only: announce who joins/leaves each room to the other room.
+const PRESENCE_NOTICES =
+    COMBINED_VOICE && (process.env.BRIDGE_PRESENCE_NOTICES || 'true').trim().toLowerCase() !== 'false';
 const CALL_ANNOUNCEMENTS =
     (process.env.BRIDGE_CALL_ANNOUNCEMENTS || 'true').trim().toLowerCase() === 'true';
 const CALL_ANNOUNCE_POLL_MS = intFromEnv('BRIDGE_CALL_ANNOUNCE_POLL_MS', 3000, {
@@ -160,6 +163,7 @@ module.exports = {
     AUTO_ACCEPT_POLL_MS,
     CALL_ANNOUNCEMENTS,
     CHAT_RELAY,
+    PRESENCE_NOTICES,
     CALL_ANNOUNCE_POLL_MS,
     COMMANDER_UIDS,
     CONTACT_GROUPS_JSON,

@@ -10,10 +10,12 @@
 //   audio/pulse.js         PulseAudio helpers
 //   api/server.js          local HTTP API
 
-const { CALL_ANNOUNCEMENTS, CHAT_RELAY, COMBINED_VOICE, COMMAND_PREFIX, VOICE_BACKEND } = require('./config');
+const { CALL_ANNOUNCEMENTS, CHAT_RELAY, COMBINED_VOICE, COMMAND_PREFIX, PRESENCE_NOTICES, VOICE_BACKEND } = require('./config');
 const { createApiServer } = require('./api/server');
 const { startAudioRouter } = require('./audio/router');
 const { createChatRelay } = require('./chat-relay');
+const { createPresence } = require('./presence');
+const state = require('./state');
 const { runMumbleCommandBot } = require('./mumble/command-listener');
 const { runTeamSpeakCommandListener } = require('./teamspeak/command-listener');
 const { startCallAnnouncements } = require('./whatsapp/call-announcements');
@@ -59,7 +61,25 @@ async function main() {
     if (CALL_ANNOUNCEMENTS) startCallAnnouncements(waClient);
 
     if (COMBINED_VOICE) {
-        const chatRelay = CHAT_RELAY ? createChatRelay({ commandPrefix: COMMAND_PREFIX }) : undefined;
+        const relay = CHAT_RELAY || PRESENCE_NOTICES ? createChatRelay({ commandPrefix: COMMAND_PREFIX }) : undefined;
+        const chatRelay = CHAT_RELAY ? relay : undefined;
+        if (PRESENCE_NOTICES) {
+            createPresence({
+                announce: relay.announce,
+                sides: {
+                    teamspeak: {
+                        label: 'TS',
+                        poll: () => state.clientQuery.listChannelRoster(),
+                        sendPrivate: (user, text) => state.clientQuery.sendPrivateMessage(user.clid, text),
+                    },
+                    mumble: {
+                        label: 'Mumble',
+                        poll: () => state.voiceChannels.mumble.roster(),
+                        sendPrivate: (user, text) => state.voiceChannels.mumble.sendPrivateMessage(user.session, text),
+                    },
+                },
+            }).start();
+        }
         await Promise.all([
             runTeamSpeakCommandListener(waClient, { chatRelay }),
             runMumbleCommandBot(waClient, { chatRelay }),

@@ -194,6 +194,22 @@ class ClientQuery {
         return info;
     }
 
+    // Other regular clients in the bridge's channel; ServerQuery clients are skipped.
+    async listChannelRoster() {
+        const own = await this.getOwnClientInfo();
+        const channel = own.cid || own.client_channel_id;
+        if (!channel) throw new Error('Could not determine the TeamSpeak channel.');
+        const rows = parseTsRows(await this.command('clientlist -uid'));
+        const users = rows
+            .filter((row) => row.clid && row.cid === channel && row.clid !== this.ownClientId && row.client_type !== '1')
+            .map((row) => ({ key: row.client_unique_identifier || row.clid, clid: row.clid, name: row.client_nickname || '' }));
+        return { channel, users };
+    }
+
+    async sendPrivateMessage(clid, message) {
+        await this.command(`sendtextmessage targetmode=1 target=${tsEscape(clid)} msg=${tsEscape(message)}`);
+    }
+
     async listChannels() {
         const rows = parseTsRows(await this.command('channellist'));
         return rows

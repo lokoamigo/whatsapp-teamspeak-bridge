@@ -12,6 +12,10 @@ backward compatibility guarantees.
 
 - Combined mode relays channel chat between the TeamSpeak and Mumble rooms as
   `[TS] Name: text` / `[Mumble] Name: text`. Disable with `BRIDGE_CHAT_RELAY=false`.
+- Combined mode announces joins/leaves in the bridge's TeamSpeak and Mumble
+  channels to the other room, and privately tells each new arrival who is in the
+  other room. Disable with `BRIDGE_PRESENCE_NOTICES=false`. Needs a rebuilt
+  native Mumble helper (new `roster` operation).
 
 ### Fixed
 

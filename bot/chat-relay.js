@@ -101,7 +101,17 @@ function createChatRelay({
         relay('mumble', event.user && event.user.name, mumbleHtmlToText(event.message));
     }
 
-    return { fromTeamSpeak, fromMumble, relay };
+    // Posts a bridge-originated notice (presence etc.) through the same
+    // rate-limited queues as relayed chat.
+    function announce(target, line) {
+        try {
+            deliver(target, truncateBytes(normalize(line), MAX_BYTES));
+        } catch (error) {
+            logError(`Chat relay failed: ${error.message}`);
+        }
+    }
+
+    return { fromTeamSpeak, fromMumble, relay, announce };
 }
 
-module.exports = { createChatRelay, stripTeamSpeakBbcode, truncateBytes };
+module.exports = { createChatRelay, normalize, stripTeamSpeakBbcode, truncateBytes };
